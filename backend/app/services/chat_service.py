@@ -22,17 +22,18 @@ _model_cache: dict[str, tuple[float, tuple[str, str]]] = {}
 _MODEL_CACHE_TTL = 3600  # re-discover after 1 hour
 
 
-async def _discover_model(api_key: str, client: httpx.AsyncClient) -> tuple[str, str]:
+async def _list_models(api_key: str, client: httpx.AsyncClient) -> list[tuple[str, str]]:
     """
-    Call ListModels on v1beta then v1 to find the best generateContent model
-    available for this API key. Returns (model_id, api_version).
+    Call ListModels on v1beta then v1 and return ALL generateContent models
+    in priority order. Result is cached for MODEL_CACHE_TTL seconds.
+    Returns list of (model_id, api_version).
     """
     cache_key = api_key[:12]
     cached = _model_cache.get(cache_key)
     if cached and time.monotonic() < cached[0]:
-        return cached[1]
+        return cached[1]  # type: ignore[return-value]
 
-    candidates: list[tuple[str, str]] = []  # (model_id, version)
+    candidates: list[tuple[str, str]] = []
 
     for version in ("v1beta", "v1"):
         resp = await client.get(
@@ -46,7 +47,9 @@ async def _discover_model(api_key: str, client: httpx.AsyncClient) -> tuple[str,
             if "generateContent" not in m.get("supportedGenerationMethods", []):
                 continue
             model_id = m["name"].removeprefix("models/")
-            candidates.append((model_id, version))
+            # Avoid duplicates (same model can appear in both v1 and v1beta)
+            if not any(mid == model_id for mid, _ in candidates):
+                candidates.append((model_id, version))
 
     if not candidates:
         raise ValueError(
@@ -55,7 +58,6 @@ async def _discover_model(api_key: str, client: httpx.AsyncClient) -> tuple[str,
             "and the Generative Language API is enabled for your project."
         )
 
-    # Pick highest-priority candidate
     def priority(item: tuple[str, str]) -> int:
         model_id = item[0]
         for i, pref in enumerate(_PREFERRED):
@@ -63,9 +65,9 @@ async def _discover_model(api_key: str, client: httpx.AsyncClient) -> tuple[str,
                 return i
         return len(_PREFERRED)
 
-    best = min(candidates, key=priority)
-    _model_cache[cache_key] = (time.monotonic() + _MODEL_CACHE_TTL, best)
-    return best
+    candidates.sort(key=priority)
+    _model_cache[cache_key] = (time.monotonic() + _MODEL_CACHE_TTL, candidates)  # type: ignore[assignment]
+    return candidates
 
 
 SYSTEM_TEMPLATE = """\
@@ -153,21 +155,30 @@ async def chat(request: ChatRequest) -> ChatResponse:
         "generationConfig": {"maxOutputTokens": 1024, "temperature": 0.4},
     }
 
+    last_error = "No Gemini models available for this API key"
+    resp = None
     async with httpx.AsyncClient() as client:
-        model_id, version = await _discover_model(request.api_key, client)
+        models = await _list_models(request.api_key, client)
 
-        resp = await client.post(
-            f"{GEMINI_API}/{version}/models/{model_id}:generateContent",
-            params={"key": request.api_key},
-            json=payload,
-            timeout=30,
-        )
+        for model_id, version in models:
+            resp = await client.post(
+                f"{GEMINI_API}/{version}/models/{model_id}:generateContent",
+                params={"key": request.api_key},
+                json=payload,
+                timeout=30,
+            )
+            if resp.status_code == 200:
+                break
+            error_msg = resp.json().get("error", {}).get("message", resp.text[:200])
+            last_error = f"Gemini API error {resp.status_code}: {error_msg}"
+            # Retry on quota (429) or not-found (404); stop on auth errors
+            if resp.status_code not in (404, 429, 503):
+                raise ValueError(last_error)
+        else:
+            raise ValueError(last_error)
 
-    if resp.status_code != 200:
-        # Clear cached model so next request re-discovers
-        _model_cache.pop(request.api_key[:12], None)
-        error_msg = resp.json().get("error", {}).get("message", resp.text[:200])
-        raise ValueError(f"Gemini API error {resp.status_code}: {error_msg}")
+    if resp is None or resp.status_code != 200:
+        raise ValueError(last_error)
 
     reply_text = resp.json()["candidates"][0]["content"]["parts"][0]["text"]
 
