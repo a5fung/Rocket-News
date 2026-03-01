@@ -276,7 +276,7 @@ export default function Q4Sentiment({ selectedSymbol, symbols }: Props) {
                     <span className="text-xs text-gray-500 truncate">{post.author}</span>
                   </div>
                   <div className="flex items-center gap-2 shrink-0">
-                    <span className="text-xs text-gray-600">{post.engagement}pts</span>
+                    <span className="text-xs text-gray-600">↑{post.engagement.toLocaleString()}</span>
                     {post.sentimentScore !== 0 && (
                       <span className={`text-xs font-mono font-semibold ${isPos ? 'text-bull' : isNeg ? 'text-bear' : 'text-gray-400'}`}>
                         {isPos ? '+' : ''}{post.sentimentScore.toFixed(2)}

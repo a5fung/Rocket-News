@@ -15,6 +15,32 @@ from app.models.schemas import AirlockResult, CatalystTag
 
 PASS_THRESHOLD = 7.0
 
+# ── Keyword-based sentiment fallback (used when no Anthropic API key) ──────────
+
+_BULLISH = frozenset([
+    "bullish", "bull", "buy", "long", "calls", "moon", "squeeze", "breakout",
+    "upgrade", "beat", "strong", "growth", "surge", "rally", "bounce",
+    "outperform", "upside", "accumulate", "oversold", "dip", "undervalued",
+    "catalyst", "guidance raise", "beat expectations", "record",
+])
+_BEARISH = frozenset([
+    "bearish", "bear", "sell", "short", "puts", "crash", "dump", "downgrade",
+    "miss", "weak", "decline", "fall", "drop", "overvalued", "avoid",
+    "underperform", "overbought", "resistance", "ceiling", "layoffs", "recall",
+    "investigation", "lawsuit", "fraud",
+])
+
+
+def _keyword_sentiment(text: str) -> float:
+    """Simple bag-of-words sentiment score, capped at ±0.75."""
+    lower = text.lower()
+    bull = sum(1 for w in _BULLISH if w in lower)
+    bear = sum(1 for w in _BEARISH if w in lower)
+    total = bull + bear
+    if total == 0:
+        return 0.0
+    return round((bull - bear) / total * 0.75, 2)
+
 SYSTEM_PROMPT = """\
 You are a financial relevance scoring engine for a stock trading dashboard.
 
@@ -46,10 +72,10 @@ def _get_client() -> anthropic.AsyncAnthropic:
 async def score(ticker: str, text: str) -> AirlockResult:
     """Score a single piece of content for relevance and sentiment."""
     if not settings.anthropic_api_key:
-        # Dev fallback: pass everything with neutral scores
+        # No LLM key: pass everything, use keyword-based sentiment as fallback
         return AirlockResult(
             relevance_score=8.0,
-            sentiment_score=0.0,
+            sentiment_score=_keyword_sentiment(text),
             catalyst=None,
             passes=True,
         )

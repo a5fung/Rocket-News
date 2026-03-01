@@ -14,6 +14,7 @@ Reddit:
 """
 
 import asyncio
+import time
 import uuid
 from datetime import datetime, timezone
 
@@ -39,6 +40,11 @@ FINANCE_KEYWORDS = {
 
 # Lower bar for engagement — smaller stocks attract fewer votes per post
 MIN_ENGAGEMENT = 3
+
+# Simple in-process cache — avoids hammering Reddit on every UI poll
+# Key: symbol, Value: (timestamp, posts_list)
+_posts_cache: dict[str, tuple[float, list]] = {}
+CACHE_TTL = 300  # seconds (5 minutes)
 
 
 def _is_finance_post(data: dict, symbol: str) -> bool:
@@ -150,6 +156,8 @@ async def _search_reddit(symbol: str, subreddit: str) -> list[dict]:
                 },
                 timeout=10,
             )
+            if resp.status_code == 429:
+                return []  # rate-limited; cache will prevent immediate retry
             if resp.status_code != 200:
                 return []
             return resp.json().get("data", {}).get("children", [])
@@ -213,20 +221,24 @@ async def _fetch_reddit(symbol: str) -> list[SentimentPost]:
 async def get_posts(symbol: str, limit: int = 20) -> list[SentimentPost]:
     """
     Fetch sentiment posts from StockTwits + Reddit, merge and rank.
-    StockTwits is primary (native sentiment, always returns results).
-    Reddit is secondary (richer context, airlock filtered).
+    Results are cached for CACHE_TTL seconds to prevent Reddit rate-limiting.
     """
+    now = time.monotonic()
+    cached = _posts_cache.get(symbol)
+    if cached and (now - cached[0]) < CACHE_TTL:
+        return cached[1][:limit]
+
     st_posts, reddit_posts = await asyncio.gather(
         _fetch_stocktwits(symbol, limit=25),
         _fetch_reddit(symbol),
     )
 
-    # Merge: StockTwits first (generally more reliable), then Reddit
     combined = st_posts + reddit_posts
-
-    # Sort by engagement descending
     combined.sort(key=lambda p: p.engagement, reverse=True)
-    return combined[:limit]
+    result = combined[:limit]
+
+    _posts_cache[symbol] = (now, result)
+    return result
 
 
 async def get_sentiment(symbol: str) -> SentimentScore:
