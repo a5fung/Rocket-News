@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import type { EarningsEvent, Ticker } from '@/types';
 
 function TickerLogo({ url, symbol }: { url?: string; symbol: string }) {
@@ -170,10 +170,14 @@ export default function Q1Heatmap({ tickers, earnings, moveTags, loading, error,
   const [sortMode, setSortMode] = useState<SortMode>('change');
   const earningsMap = new Map(earnings.map((e) => [e.symbol, e]));
 
-  const sorted = [...tickers].sort((a, b) =>
-    sortMode === 'alpha'
-      ? a.symbol.localeCompare(b.symbol)
-      : Math.abs(b.changePercent) - Math.abs(a.changePercent)
+  const sorted = useMemo(
+    () =>
+      [...tickers].sort((a, b) =>
+        sortMode === 'alpha'
+          ? a.symbol.localeCompare(b.symbol)
+          : b.changePercent - a.changePercent,
+      ),
+    [tickers, sortMode],
   );
 
   // Normalisation baseline — biggest |% change| in today's watchlist
