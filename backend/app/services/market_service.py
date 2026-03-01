@@ -25,12 +25,18 @@ async def get_quote(symbol: str) -> Ticker | None:
             return None
 
         data = resp.json()
-        price = data.get("c", 0)
-        prev_close = data.get("pc", price)
-        change = data.get("d", 0)
-        change_pct = data.get("dp", 0)
 
-        # Get company name via profile endpoint
+        # Finnhub returns null for d/dp outside market hours or for unknown tickers.
+        # .get("d", 0) won't help when the key exists but the value is null — use `or 0`.
+        price = data.get("c") or 0.0
+        prev_close = data.get("pc") or price
+        change = data.get("d") or 0.0
+        change_pct = data.get("dp") or 0.0
+
+        # Skip tickers Finnhub doesn't recognise (price stays 0)
+        if price == 0:
+            return None
+
         profile = await _get_profile(client, symbol)
 
         return Ticker(
