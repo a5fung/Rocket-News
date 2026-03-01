@@ -97,6 +97,27 @@ export async function fetchSentimentPosts(
   return request<SentimentPost[]>(`/sentiment/${symbol}/posts?limit=${limit}`);
 }
 
+// ─── Alerts ───────────────────────────────────────────────────────────────────
+
+export async function fetchAlertStatus(): Promise<ApiResult<{
+  configured: boolean;
+  symbols: string[];
+  priceThresholdPct: number;
+}>> {
+  return request('/alerts/status');
+}
+
+export async function syncAlertWatchlist(symbols: string[]): Promise<void> {
+  await request('/alerts/watchlist', {
+    method: 'POST',
+    body: JSON.stringify({ symbols }),
+  });
+}
+
+export async function sendTestAlert(): Promise<ApiResult<{ ok: boolean; error: string | null }>> {
+  return request('/alerts/test', { method: 'POST' });
+}
+
 // ─── AI Chat ──────────────────────────────────────────────────────────────────
 
 export async function sendChatMessage(

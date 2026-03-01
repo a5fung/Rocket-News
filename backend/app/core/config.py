@@ -15,6 +15,11 @@ class Settings(BaseSettings):
     alpaca_api_secret: str = ""
     # Financial Modeling Prep — free tier (250 req/day), good SEC filing coverage
     fmp_api_key: str = ""
+    # Telegram Scout alerts
+    telegram_bot_token: str = ""
+    telegram_chat_id: str = ""
+    alert_symbols: str = ""       # fallback comma-separated list; frontend syncs at runtime
+    alert_price_pct: float = 5.0  # alert when |change%| >= this value
 
     @property
     def cors_origins_list(self) -> list[str]:

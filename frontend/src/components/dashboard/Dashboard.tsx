@@ -1,10 +1,11 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useWatchlist } from '@/hooks/useWatchlist';
 import { useEarningsCalendar, useMarketData } from '@/hooks/useMarketData';
 import { useExplainMove } from '@/hooks/useExplainMove';
 import { useNews } from '@/hooks/useNews';
+import { syncAlertWatchlist } from '@/lib/api';
 import type { DashboardContext } from '@/types';
 
 import Q1Heatmap from './Q1Heatmap';
@@ -12,6 +13,7 @@ import Q2NewsFeed from './Q2NewsFeed';
 import Q3AIChat from './Q3AIChat';
 import Q4Sentiment from './Q4Sentiment';
 import MobileNav from '@/components/mobile/MobileNav';
+import AlertsButton from '@/components/shared/AlertsButton';
 import WatchlistManager from '@/components/shared/WatchlistManager';
 import RocketLogo from '@/components/shared/RocketLogo';
 
@@ -25,6 +27,13 @@ export default function Dashboard() {
   const { moveTags } = useExplainMove(tickers);
   const [selectedSymbol, setSelectedSymbol] = useState<string | null>(null);
   const [mobileTab, setMobileTab] = useState<MobileTab>('heatmap');
+
+  // Sync watchlist to the backend alert scout whenever it changes
+  useEffect(() => {
+    if (isLoaded && symbols.length > 0) {
+      void syncAlertWatchlist(symbols);
+    }
+  }, [isLoaded, symbols]);
 
   // Build dashboard context for AI injection
   const getDashboardContext = useMemo(
@@ -50,7 +59,10 @@ export default function Dashboard() {
           </span>
           <span className="text-gray-500 text-xs">· {symbols.length} stocks</span>
         </div>
-        <WatchlistManager symbols={symbols} onAdd={add} onRemove={remove} />
+        <div className="flex items-center gap-2">
+          <AlertsButton symbols={symbols} />
+          <WatchlistManager symbols={symbols} onAdd={add} onRemove={remove} />
+        </div>
       </header>
 
       {/* ── Desktop layout: 2×2 grid ──────────────────────────────────── */}
