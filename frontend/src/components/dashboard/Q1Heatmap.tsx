@@ -146,9 +146,9 @@ export default function Q1Heatmap({ tickers, loading, error, selectedSymbol, onS
       {/* Content area — fills remaining quadrant height */}
       <div className="flex-1 min-h-0 overflow-hidden p-2">
         {loading && tickers.length === 0 ? (
-          // Skeleton grid while first fetch is in flight
-          <div className="h-full grid grid-cols-2 gap-2" style={{ gridTemplateRows: 'repeat(2, 1fr)' }}>
-            {Array.from({ length: 4 }).map((_, i) => <SkeletonTile key={i} />)}
+          // Skeleton grid fills the full quadrant (3×2 assumed for typical watchlist)
+          <div className="h-full grid grid-cols-3 gap-2" style={{ gridTemplateRows: 'repeat(2, 1fr)' }}>
+            {Array.from({ length: 6 }).map((_, i) => <SkeletonTile key={i} />)}
           </div>
         ) : error ? (
           <div className="flex flex-col items-center justify-center h-full gap-1 text-sm">

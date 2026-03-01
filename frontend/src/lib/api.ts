@@ -3,12 +3,13 @@ import type {
   ChatMessage,
   DashboardContext,
   NewsItem,
+  SentimentBundle,
   SentimentDataPoint,
   SentimentPost,
   SentimentScore,
   Ticker,
 } from '@/types';
-import { getApiKey, getApiProvider } from './storage';
+import { getApiKey } from './storage';
 
 const BASE = '/api'; // proxied to FastAPI via next.config.ts
 
@@ -54,6 +55,16 @@ export async function fetchTickerNews(symbol: string, limit = 10): Promise<ApiRe
 
 // ─── Sentiment ────────────────────────────────────────────────────────────────
 
+/** Single combined request — score + history + posts in one round trip. */
+export async function fetchSentimentAll(
+  symbol: string,
+  days = 7,
+  limit = 20,
+): Promise<ApiResult<SentimentBundle>> {
+  return request<SentimentBundle>(`/sentiment/${symbol}/all?days=${days}&limit=${limit}`);
+}
+
+// Individual endpoints kept for direct use if needed
 export async function fetchSentiment(symbol: string): Promise<ApiResult<SentimentScore>> {
   return request<SentimentScore>(`/sentiment/${symbol}`);
 }
@@ -79,10 +90,8 @@ export async function sendChatMessage(
   context: DashboardContext,
 ): Promise<ApiResult<{ reply: string; citedHeadlines?: string[] }>> {
   const apiKey = getApiKey();
-  const provider = getApiProvider();
-
   return request(`/chat`, {
     method: 'POST',
-    body: JSON.stringify({ messages, context, apiKey, provider }),
+    body: JSON.stringify({ messages, context, apiKey }),
   });
 }

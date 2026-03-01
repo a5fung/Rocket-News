@@ -1,9 +1,36 @@
+import asyncio
+
 from fastapi import APIRouter, Query
 
-from app.models.schemas import SentimentDataPoint, SentimentPost, SentimentScore
+from app.models.schemas import (
+    SentimentBundle,
+    SentimentDataPoint,
+    SentimentPost,
+    SentimentScore,
+)
 from app.services import sentiment_service
 
 router = APIRouter(prefix="/sentiment", tags=["sentiment"])
+
+
+@router.get("/{symbol}/all", response_model=SentimentBundle, response_model_by_alias=True)
+async def get_sentiment_all(
+    symbol: str,
+    days: int = Query(7, ge=1, le=30),
+    limit: int = Query(20, ge=1, le=50),
+):
+    """
+    Combined endpoint: score + history + posts in one round trip.
+    Fetches posts first to warm the cache, then score (which re-uses the cache)
+    and history run concurrently — eliminating the double Reddit fetch.
+    """
+    sym = symbol.upper()
+    posts = await sentiment_service.get_posts(sym, limit=limit)
+    score, history = await asyncio.gather(
+        sentiment_service.get_sentiment(sym),
+        sentiment_service.get_sentiment_history(sym, days=days),
+    )
+    return SentimentBundle(score=score, history=history, posts=posts)
 
 
 @router.get("/{symbol}", response_model=SentimentScore, response_model_by_alias=True)

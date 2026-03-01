@@ -74,6 +74,12 @@ export interface SentimentPost {
   url: string;
 }
 
+export interface SentimentBundle {
+  score: SentimentScore;
+  history: SentimentDataPoint[];
+  posts: SentimentPost[];
+}
+
 // ─── AI Chat ──────────────────────────────────────────────────────────────────
 
 export interface ChatMessage {

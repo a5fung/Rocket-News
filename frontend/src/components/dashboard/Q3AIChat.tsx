@@ -24,15 +24,15 @@ function ApiKeySetup({ onSave }: { onSave: (key: string) => void }) {
     <div className="flex flex-col items-center justify-center h-full gap-4 p-6 text-center">
       <Key size={32} className="text-accent" />
       <div>
-        <p className="text-sm font-medium">Connect your AI</p>
+        <p className="text-sm font-medium">Connect Gemini AI</p>
         <p className="text-xs text-gray-500 mt-1">
-          Enter your Anthropic API key. It stays in your browser only.
+          Enter your Google AI Studio key. Free tier · stays in your browser only.
         </p>
       </div>
       <div className="flex gap-2 w-full max-w-sm">
         <input
           type="password"
-          placeholder="sk-ant-..."
+          placeholder="AIzaSy..."
           value={value}
           onChange={(e) => setValue(e.target.value)}
           className="flex-1 bg-surface border border-surface-border rounded-md px-3 py-2 text-sm
@@ -94,9 +94,18 @@ export default function Q3AIChat({ getContext, selectedSymbol }: Props) {
         <span className="quadrant-title">
           AI Chat {selectedSymbol && <span className="text-accent">· ${selectedSymbol}</span>}
         </span>
-        <button onClick={clear} className="btn-ghost p-1" title="Clear chat">
-          <Trash2 size={14} />
-        </button>
+        <div className="flex items-center gap-1">
+          <button
+            onClick={() => { clear(); setApiKey(''); setKey(''); }}
+            className="btn-ghost p-1"
+            title="Change API key"
+          >
+            <Key size={14} />
+          </button>
+          <button onClick={clear} className="btn-ghost p-1" title="Clear chat">
+            <Trash2 size={14} />
+          </button>
+        </div>
       </div>
 
       {/* Messages */}

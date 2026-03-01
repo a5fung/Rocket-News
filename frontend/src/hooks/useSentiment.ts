@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { fetchSentiment, fetchSentimentHistory, fetchSentimentPosts } from '@/lib/api';
+import { fetchSentimentAll } from '@/lib/api';
 import type { SentimentDataPoint, SentimentPost, SentimentScore } from '@/types';
 
 export function useSentiment(symbol: string | null) {
@@ -14,15 +14,14 @@ export function useSentiment(symbol: string | null) {
     if (!symbol) return;
     setLoading(true);
 
-    Promise.all([
-      fetchSentiment(symbol),
-      fetchSentimentHistory(symbol, 7),
-      fetchSentimentPosts(symbol, 20),
-    ]).then(([scoreRes, histRes, postsRes]) => {
+    // Single combined request — 1 round trip instead of 3
+    fetchSentimentAll(symbol, 7, 20).then((result) => {
       setLoading(false);
-      if (!scoreRes.error) setScore(scoreRes.data);
-      if (!histRes.error) setHistory(histRes.data);
-      if (!postsRes.error) setPosts(postsRes.data);
+      if (!result.error) {
+        setScore(result.data.score);
+        setHistory(result.data.history);
+        setPosts(result.data.posts);
+      }
     });
   }, [symbol]);
 

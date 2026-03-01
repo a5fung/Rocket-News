@@ -92,6 +92,13 @@ class SentimentPost(_CamelModel):
     url: str
 
 
+class SentimentBundle(_CamelModel):
+    """Combined response for /sentiment/{symbol}/all — one round trip instead of three."""
+    score: SentimentScore
+    history: list[SentimentDataPoint]
+    posts: list[SentimentPost]
+
+
 # ─── Chat ─────────────────────────────────────────────────────────────────────
 
 class ChatRole(str, Enum):
@@ -118,7 +125,6 @@ class ChatRequest(_CamelModel):
     messages: list[ChatMessage]
     context: DashboardContext
     api_key: str
-    provider: Literal["anthropic", "openai"] = "anthropic"
 
 
 class ChatResponse(_CamelModel):

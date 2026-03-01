@@ -8,7 +8,23 @@ interface Props {
   news: NewsItem[];
   symbols: string[];
   selectedSymbol: string | null;
+  loading?: boolean;
   onSelectTicker: (symbol: string) => void;
+}
+
+function SkeletonCard({ wide }: { wide?: boolean }) {
+  return (
+    <div className="flex flex-col gap-2 p-3 rounded-md border border-surface-border animate-pulse">
+      <div className="flex items-center gap-2">
+        <div className="h-4 w-5 rounded bg-surface-border" />
+        <div className={`h-4 rounded bg-surface-border ${wide ? 'w-24' : 'w-16'}`} />
+        <div className="ml-auto h-4 w-10 rounded bg-surface-border" />
+      </div>
+      <div className="h-4 rounded bg-surface-border w-full" />
+      <div className="h-4 rounded bg-surface-border w-3/4" />
+      <div className="h-3 rounded bg-surface-border w-20 mt-1" />
+    </div>
+  );
 }
 
 const CATALYST_COLORS: Record<CatalystTag, string> = {
@@ -98,7 +114,7 @@ function NewsCard({ item }: { item: NewsItem }) {
   );
 }
 
-export default function Q2NewsFeed({ news, symbols, selectedSymbol }: Props) {
+export default function Q2NewsFeed({ news, symbols, selectedSymbol, loading }: Props) {
   const [filterTicker, setFilterTicker] = useState<string | null>(null);
 
   const activeTicker = filterTicker ?? selectedSymbol;
@@ -152,7 +168,16 @@ export default function Q2NewsFeed({ news, symbols, selectedSymbol }: Props) {
         </div>
       </div>
       <div className="flex-1 overflow-y-auto p-2 flex flex-col gap-2">
-        {filtered.length === 0 ? (
+        {loading && news.length === 0 ? (
+          // Prominent skeleton while first fetch is in flight
+          <>
+            <SkeletonCard wide />
+            <SkeletonCard />
+            <SkeletonCard wide />
+            <SkeletonCard />
+            <SkeletonCard wide />
+          </>
+        ) : filtered.length === 0 ? (
           <div className="flex items-center justify-center h-full text-gray-500 text-sm">
             No news available
           </div>

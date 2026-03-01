@@ -3,7 +3,6 @@ import type { WatchlistEntry } from '@/types';
 const KEYS = {
   watchlist: 'rn_watchlist',
   apiKey: 'rn_api_key',
-  apiProvider: 'rn_api_provider',
 } as const;
 
 function safeGet<T>(key: string, fallback: T): T {
@@ -43,7 +42,7 @@ export function removeFromWatchlist(symbol: string): void {
   safeSet(KEYS.watchlist, list);
 }
 
-// ─── AI API Key ───────────────────────────────────────────────────────────────
+// ─── Gemini API Key (stored in browser only, never sent to our servers at rest) ──
 
 export function getApiKey(): string {
   return safeGet<string>(KEYS.apiKey, '');
@@ -51,14 +50,4 @@ export function getApiKey(): string {
 
 export function setApiKey(key: string): void {
   safeSet(KEYS.apiKey, key);
-}
-
-export type ApiProvider = 'anthropic' | 'openai';
-
-export function getApiProvider(): ApiProvider {
-  return safeGet<ApiProvider>(KEYS.apiProvider, 'anthropic');
-}
-
-export function setApiProvider(provider: ApiProvider): void {
-  safeSet(KEYS.apiProvider, provider);
 }

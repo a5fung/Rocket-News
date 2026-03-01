@@ -12,6 +12,9 @@ from app.models.schemas import Ticker
 
 FINNHUB_BASE = "https://finnhub.io/api/v1"
 
+# Company names rarely change — cache profiles for 24 hours to halve Finnhub call count
+_profile_cache: dict[str, str] = {}  # symbol → company name
+
 
 async def get_quote(symbol: str) -> Ticker | None:
     """Fetch a single real-time quote from Finnhub."""
@@ -37,11 +40,15 @@ async def get_quote(symbol: str) -> Ticker | None:
         if price == 0:
             return None
 
-        profile = await _get_profile(client, symbol)
+        name = _profile_cache.get(symbol)
+        if name is None:
+            profile = await _get_profile(client, symbol)
+            name = profile.get("name", symbol) or symbol
+            _profile_cache[symbol] = name
 
         return Ticker(
             symbol=symbol,
-            name=profile.get("name", symbol),
+            name=name,
             price=float(price),
             change=float(change),
             change_percent=float(change_pct),

@@ -14,6 +14,7 @@ Reddit:
 """
 
 import asyncio
+import re
 import time
 import uuid
 from datetime import datetime, timezone
@@ -48,7 +49,14 @@ CACHE_TTL = 300  # seconds (5 minutes)
 
 
 def _is_finance_post(data: dict, symbol: str) -> bool:
-    """Return True if a Reddit post is genuinely about the stock."""
+    """Return True if a Reddit post is genuinely about the stock.
+
+    Short tickers (≤ 3 chars, e.g. BE, ON, GO, A) are common English words or
+    letter combinations that appear in almost every sentence. For these we require
+    an explicit cashtag ($BE) — plain word matching would produce massive noise.
+    Longer tickers use regex word-boundary matching to avoid substring hits
+    (e.g. "AAPL" inside "pineapple" isn't a match, though that's a contrived case).
+    """
     title = data.get("title", "")
     body = data.get("selftext", "")
     text = f"{title} {body}".lower()
@@ -57,12 +65,16 @@ def _is_finance_post(data: dict, symbol: str) -> bool:
     if engagement < MIN_ENGAGEMENT:
         return False
 
-    # Fast pass: explicit cashtag
+    # Always accept an explicit cashtag — unambiguous signal
     if f"${symbol.lower()}" in text:
         return True
 
-    # Ticker name present AND at least one finance keyword
-    if symbol.lower() in text:
+    # Short tickers must have the cashtag; plain word check would flood results
+    if len(symbol) <= 3:
+        return False
+
+    # Longer tickers: whole-word match (word-boundary) + at least one finance keyword
+    if re.search(r"\b" + re.escape(symbol.lower()) + r"\b", text):
         return any(kw in text for kw in FINANCE_KEYWORDS)
 
     return False

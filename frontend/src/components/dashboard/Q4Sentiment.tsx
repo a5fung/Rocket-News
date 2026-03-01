@@ -174,6 +174,42 @@ function SentimentChart({ history }: { history: SentimentDataPoint[] }) {
   );
 }
 
+// ── Skeleton loaders ───────────────────────────────────────────────────────────
+
+function ScoreBarSkeleton() {
+  return (
+    <div className="px-4 pt-3 pb-2 shrink-0 animate-pulse">
+      <div className="flex items-end justify-between mb-2">
+        <div className="flex items-baseline gap-2">
+          <div className="h-10 w-14 rounded bg-surface-border" />
+          <div className="h-4 w-12 rounded bg-surface-border" />
+        </div>
+        <div className="flex flex-col gap-1 items-end">
+          <div className="h-3 w-14 rounded bg-surface-border" />
+          <div className="h-3 w-14 rounded bg-surface-border" />
+        </div>
+      </div>
+      <div className="h-3 rounded-full bg-surface-border" />
+    </div>
+  );
+}
+
+function PostSkeleton() {
+  return (
+    <div className="flex flex-col gap-1.5 p-2 rounded border border-surface-border animate-pulse">
+      <div className="flex items-center gap-1.5 justify-between">
+        <div className="flex items-center gap-1.5">
+          <div className="w-4 h-4 rounded-full bg-surface-border shrink-0" />
+          <div className="h-3 w-20 rounded bg-surface-border" />
+        </div>
+        <div className="h-3 w-10 rounded bg-surface-border" />
+      </div>
+      <div className="h-3 w-full rounded bg-surface-border ml-5" />
+      <div className="h-3 w-2/3 rounded bg-surface-border ml-5" />
+    </div>
+  );
+}
+
 // ── Main component ─────────────────────────────────────────────────────────────
 
 export default function Q4Sentiment({ selectedSymbol, symbols }: Props) {
@@ -228,11 +264,24 @@ export default function Q4Sentiment({ selectedSymbol, symbols }: Props) {
               {score.trend}
             </span>
           )}
-          {loading && <span className="text-xs text-gray-500 animate-pulse">loading…</span>}
         </div>
       </div>
 
       <div className="flex-1 overflow-y-auto flex flex-col min-h-0">
+        {/* ── Skeleton while loading ── */}
+        {loading && !score && (
+          <>
+            <ScoreBarSkeleton />
+            <div className="flex-1 px-2 pb-2 pt-1 flex flex-col gap-1.5 border-t border-surface-border">
+              <div className="h-3 w-24 rounded bg-surface-border animate-pulse mb-1" />
+              <PostSkeleton />
+              <PostSkeleton />
+              <PostSkeleton />
+              <PostSkeleton />
+            </div>
+          </>
+        )}
+
         {/* ── Score bar ── */}
         {score && (
           <ScoreBar score={score.score} bullish={score.bullishPct} bearish={score.bearishPct} />
@@ -245,12 +294,13 @@ export default function Q4Sentiment({ selectedSymbol, symbols }: Props) {
         {history.length > 0 && <SentimentChart history={history} />}
 
         {/* ── Post feed ── */}
+        {!loading && (
         <div className="flex-1 overflow-y-auto px-2 pb-2 pt-1 flex flex-col gap-1.5 min-h-0 border-t border-surface-border">
           <p className="text-xs text-gray-500 px-1 shrink-0">
             Top posts · {posts.length} relevant
           </p>
 
-          {posts.length === 0 && !loading && (
+          {posts.length === 0 && (
             <p className="text-xs text-gray-600 px-1">
               No finance posts found for ${symbol} in the last week
             </p>
@@ -291,6 +341,7 @@ export default function Q4Sentiment({ selectedSymbol, symbols }: Props) {
             );
           })}
         </div>
+        )}
       </div>
     </section>
   );

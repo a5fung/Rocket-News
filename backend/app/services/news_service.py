@@ -11,6 +11,7 @@ SEC filings skip the airlock — they are always material events by definition.
 """
 
 import asyncio
+import time
 import uuid
 import xml.etree.ElementTree as ET
 from datetime import datetime, timedelta, timezone
@@ -21,6 +22,11 @@ import httpx
 from app.core.config import settings
 from app.models.schemas import NewsItem
 from app.services import airlock
+
+# In-process cache — avoids hammering 5 external APIs on every 60-s frontend poll
+# Key: symbol, Value: (monotonic_timestamp, items_list)
+_news_cache: dict[str, tuple[float, list[NewsItem]]] = {}
+NEWS_CACHE_TTL = 300  # seconds (5 minutes)
 
 FINNHUB_BASE = "https://finnhub.io/api/v1"
 
@@ -275,6 +281,11 @@ async def _fetch_sec_edgar(symbol: str, from_date: str) -> list[NewsItem]:
 
 async def get_news_for_ticker(symbol: str, days: int = 3, limit: int = 10) -> list[NewsItem]:
     """Fetch, score, and return news for a single ticker from all sources."""
+    now = time.monotonic()
+    cached = _news_cache.get(symbol)
+    if cached and (now - cached[0]) < NEWS_CACHE_TTL:
+        return cached[1][:limit]
+
     from_date = (datetime.now(timezone.utc) - timedelta(days=days)).strftime("%Y-%m-%d")
     to_date = datetime.now(timezone.utc).strftime("%Y-%m-%d")
 
@@ -332,7 +343,9 @@ async def get_news_for_ticker(symbol: str, days: int = 3, limit: int = 10) -> li
 
     # Sort: Tier 1 first, then most recent
     items.sort(key=lambda n: (n.tier, n.published_at), reverse=False)
-    return items[:limit]
+    result = items[:limit]
+    _news_cache[symbol] = (now, result)
+    return result
 
 
 async def get_news_for_watchlist(symbols: list[str], limit: int = 20) -> list[NewsItem]:
