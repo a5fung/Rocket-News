@@ -1,0 +1,92 @@
+"""
+Airlock — LLM-powered relevance filter.
+
+Scores incoming news/posts 1-10 for relevance to a given ticker.
+Only items scoring >= PASS_THRESHOLD are passed to the frontend.
+Uses Claude Haiku for cost efficiency (~$0.00025 per call).
+"""
+
+import json
+
+import anthropic
+
+from app.core.config import settings
+from app.models.schemas import AirlockResult, CatalystTag
+
+PASS_THRESHOLD = 7.0
+
+SYSTEM_PROMPT = """\
+You are a financial relevance scoring engine for a stock trading dashboard.
+
+Given a piece of text and a stock ticker, respond ONLY with a JSON object (no markdown):
+{
+  "relevance_score": <1-10, integer>,
+  "sentiment_score": <-1.0 to 1.0, float, negative=bearish, positive=bullish>,
+  "catalyst": <one of: Earnings|Regulatory|Analyst|Macro|Insider|Contract|Product|Other|null>
+}
+
+Scoring guide for relevance_score:
+- 9-10: Direct company news (earnings, SEC filing, major contract, CEO change)
+- 7-8: Strong indirect relevance (sector news that clearly affects the stock)
+- 4-6: Weak relevance (general market commentary mentioning the stock in passing)
+- 1-3: Irrelevant (spam, crypto, unrelated content mentioning the ticker by accident)
+"""
+
+
+_client: anthropic.AsyncAnthropic | None = None
+
+
+def _get_client() -> anthropic.AsyncAnthropic:
+    global _client
+    if _client is None:
+        _client = anthropic.AsyncAnthropic(api_key=settings.anthropic_api_key)
+    return _client
+
+
+async def score(ticker: str, text: str) -> AirlockResult:
+    """Score a single piece of content for relevance and sentiment."""
+    if not settings.anthropic_api_key:
+        # Dev fallback: pass everything with neutral scores
+        return AirlockResult(
+            relevance_score=8.0,
+            sentiment_score=0.0,
+            catalyst=None,
+            passes=True,
+        )
+
+    client = _get_client()
+    user_msg = f"Ticker: {ticker}\n\nText:\n{text[:1000]}"  # cap at 1000 chars
+
+    try:
+        response = await client.messages.create(
+            model="claude-haiku-4-5-20251001",
+            max_tokens=128,
+            system=SYSTEM_PROMPT,
+            messages=[{"role": "user", "content": user_msg}],
+        )
+        raw = response.content[0].text.strip()
+        data = json.loads(raw)
+        rel = float(data.get("relevance_score", 5))
+        sent = float(data.get("sentiment_score", 0))
+        catalyst_raw = data.get("catalyst")
+        catalyst = CatalystTag(catalyst_raw) if catalyst_raw and catalyst_raw != "null" else None
+        return AirlockResult(
+            relevance_score=rel,
+            sentiment_score=max(-1.0, min(1.0, sent)),
+            catalyst=catalyst,
+            passes=rel >= PASS_THRESHOLD,
+        )
+    except Exception:
+        # On any failure, let content through with neutral score
+        return AirlockResult(
+            relevance_score=7.0,
+            sentiment_score=0.0,
+            catalyst=None,
+            passes=True,
+        )
+
+
+async def score_batch(ticker: str, texts: list[str]) -> list[AirlockResult]:
+    """Score multiple texts concurrently."""
+    import asyncio
+    return await asyncio.gather(*[score(ticker, t) for t in texts])

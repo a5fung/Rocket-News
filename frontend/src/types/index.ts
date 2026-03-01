@@ -1,0 +1,107 @@
+// ─── Market ───────────────────────────────────────────────────────────────────
+
+export interface Ticker {
+  symbol: string;
+  name: string;
+  price: number;
+  change: number;       // absolute $
+  changePercent: number; // percentage
+  volume?: number;
+  marketCap?: number;
+  sentiment?: SentimentScore;
+}
+
+// ─── News ─────────────────────────────────────────────────────────────────────
+
+export type NewsTier = 1 | 2;
+
+export type CatalystTag =
+  | 'Earnings'
+  | 'Regulatory'
+  | 'Analyst'
+  | 'Macro'
+  | 'Insider'
+  | 'Contract'
+  | 'Product'
+  | 'Other';
+
+export interface NewsItem {
+  id: string;
+  tickers: string[];
+  headline: string;
+  summary: string;
+  source: string;
+  url: string;
+  publishedAt: string; // ISO 8601
+  tier: NewsTier;
+  catalyst?: CatalystTag;
+  sentimentScore?: number; // -1 (bearish) to 1 (bullish), from airlock
+  relevanceScore?: number; // 1-10, from airlock
+}
+
+// ─── Sentiment ────────────────────────────────────────────────────────────────
+
+export type SentimentTrend = 'rising' | 'falling' | 'neutral';
+export type SentimentSource = 'reddit' | 'x';
+
+export interface SentimentScore {
+  score: number;          // -1 to 1 aggregate
+  bullishPct: number;     // 0-100
+  bearishPct: number;     // 0-100
+  trend: SentimentTrend;
+  postVolume: number;     // number of posts scored in window
+  windowHours: number;   // e.g. 24
+}
+
+export interface SentimentDataPoint {
+  timestamp: string; // ISO 8601
+  score: number;     // -1 to 1
+  volume: number;    // post count in period
+}
+
+export interface SentimentPost {
+  id: string;
+  ticker: string;
+  content: string;
+  source: SentimentSource;
+  author: string;
+  engagement: number; // upvotes/likes + comments
+  sentimentScore: number;
+  relevanceScore: number;
+  catalyst?: CatalystTag;
+  publishedAt: string;
+  url: string;
+}
+
+// ─── AI Chat ──────────────────────────────────────────────────────────────────
+
+export interface ChatMessage {
+  id: string;
+  role: 'user' | 'assistant';
+  content: string;
+  timestamp: string;
+  citedHeadlines?: string[]; // headlines the AI referenced
+}
+
+export interface DashboardContext {
+  watchlist: Ticker[];
+  topNews: NewsItem[];          // top 3 per ticker
+  sentiment: Record<string, SentimentScore>; // keyed by symbol
+  generatedAt: string;          // ISO 8601
+}
+
+// ─── Watchlist ────────────────────────────────────────────────────────────────
+
+export interface WatchlistEntry {
+  symbol: string;
+  addedAt: string; // ISO 8601
+}
+
+// ─── API Responses ────────────────────────────────────────────────────────────
+
+export interface ApiError {
+  detail: string;
+  status: number;
+}
+
+export type ApiResult<T> = { data: T; error: null } | { data: null; error: ApiError };

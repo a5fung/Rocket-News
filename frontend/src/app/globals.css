@@ -1,0 +1,67 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  html,
+  body {
+    @apply bg-surface text-gray-100 antialiased;
+    font-family: 'Inter', system-ui, sans-serif;
+  }
+
+  /* Scrollbar styling */
+  ::-webkit-scrollbar {
+    width: 4px;
+    height: 4px;
+  }
+  ::-webkit-scrollbar-track {
+    @apply bg-surface;
+  }
+  ::-webkit-scrollbar-thumb {
+    @apply bg-surface-border rounded-full;
+  }
+}
+
+@layer components {
+  .quadrant {
+    @apply bg-surface-raised border border-surface-border rounded-lg overflow-hidden flex flex-col;
+  }
+
+  .quadrant-header {
+    @apply flex items-center justify-between px-4 py-3 border-b border-surface-border shrink-0;
+  }
+
+  .quadrant-title {
+    @apply text-xs font-semibold uppercase tracking-widest text-gray-400;
+  }
+
+  .pill {
+    @apply inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-medium;
+  }
+
+  .pill-bull {
+    @apply pill bg-bull-muted text-bull;
+  }
+
+  .pill-bear {
+    @apply pill bg-bear-muted text-bear;
+  }
+
+  .pill-neutral {
+    @apply pill bg-surface-border text-gray-400;
+  }
+
+  .btn {
+    @apply inline-flex items-center gap-2 rounded-md px-3 py-1.5 text-sm font-medium
+           transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent
+           disabled:opacity-50 disabled:pointer-events-none;
+  }
+
+  .btn-primary {
+    @apply btn bg-accent hover:bg-accent-muted text-white;
+  }
+
+  .btn-ghost {
+    @apply btn text-gray-400 hover:text-gray-100 hover:bg-surface-border;
+  }
+}
