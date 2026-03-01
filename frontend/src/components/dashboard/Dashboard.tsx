@@ -19,7 +19,7 @@ import PortfolioManager from '@/components/shared/PortfolioManager';
 import WatchlistManager from '@/components/shared/WatchlistManager';
 import RocketLogo from '@/components/shared/RocketLogo';
 
-export type MobileTab = 'heatmap' | 'news' | 'ai' | 'sentiment';
+export type MobileTab = 'market' | 'research';
 
 export default function Dashboard() {
   const { symbols, isLoaded, add, remove } = useWatchlist();
@@ -30,7 +30,7 @@ export default function Dashboard() {
   const { sparklines } = useSparklines(isLoaded ? symbols : []);
   const { positions, setPosition, clearPosition } = usePortfolio();
   const [selectedSymbol, setSelectedSymbol] = useState<string | null>(null);
-  const [mobileTab, setMobileTab] = useState<MobileTab>('heatmap');
+  const [mobileTab, setMobileTab] = useState<MobileTab>('market');
 
   // Sync watchlist to the backend alert scout whenever it changes
   useEffect(() => {
@@ -78,21 +78,34 @@ export default function Dashboard() {
         <Q4Sentiment selectedSymbol={selectedSymbol} symbols={symbols} />
       </main>
 
-      {/* ── Mobile layout: full-screen tab ────────────────────────────── */}
+      {/* ── Mobile layout: 2-tab split-pane ────────────────────────────── */}
       <main className="flex flex-col flex-1 md:hidden overflow-hidden">
-        <div className="flex-1 overflow-hidden">
-          {mobileTab === 'heatmap' && (
-            <Q1Heatmap tickers={tickers} earnings={earnings} moveTags={moveTags} sparklines={sparklines} positions={positions} loading={!isLoaded || marketLoading || (symbols.length > 0 && tickers.length === 0 && !marketError)} error={marketError} {...sharedProps} />
+        <div className="flex-1 min-h-0 overflow-hidden">
+
+          {/* Market tab: Heatmap (top 45%) + Sentiment (bottom 55%) */}
+          {mobileTab === 'market' && (
+            <div className="flex flex-col h-full">
+              <div className="h-[45%] min-h-0 overflow-hidden border-b border-surface-border">
+                <Q1Heatmap tickers={tickers} earnings={earnings} moveTags={moveTags} sparklines={sparklines} positions={positions} loading={!isLoaded || marketLoading || (symbols.length > 0 && tickers.length === 0 && !marketError)} error={marketError} {...sharedProps} />
+              </div>
+              <div className="flex-1 min-h-0 overflow-hidden">
+                <Q4Sentiment selectedSymbol={selectedSymbol} symbols={symbols} />
+              </div>
+            </div>
           )}
-          {mobileTab === 'news' && (
-            <Q2NewsFeed news={news} symbols={symbols} loading={newsLoading} {...sharedProps} />
+
+          {/* Research tab: News (top 55%) + AI Chat (bottom 45%) */}
+          {mobileTab === 'research' && (
+            <div className="flex flex-col h-full">
+              <div className="h-[55%] min-h-0 overflow-hidden border-b border-surface-border">
+                <Q2NewsFeed news={news} symbols={symbols} loading={newsLoading} {...sharedProps} />
+              </div>
+              <div className="flex-1 min-h-0 overflow-hidden">
+                <Q3AIChat getContext={getDashboardContext} selectedSymbol={selectedSymbol} tickers={tickers} />
+              </div>
+            </div>
           )}
-          {mobileTab === 'ai' && (
-            <Q3AIChat getContext={getDashboardContext} selectedSymbol={selectedSymbol} tickers={tickers} />
-          )}
-          {mobileTab === 'sentiment' && (
-            <Q4Sentiment selectedSymbol={selectedSymbol} symbols={symbols} />
-          )}
+
         </div>
         <MobileNav activeTab={mobileTab} onTabChange={setMobileTab} />
       </main>

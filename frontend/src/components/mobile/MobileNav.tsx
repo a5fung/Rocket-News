@@ -1,6 +1,6 @@
 'use client';
 
-import { BarChart2, Bot, Flame, Newspaper } from 'lucide-react';
+import { Newspaper, TrendingUp } from 'lucide-react';
 import type { MobileTab } from '@/components/dashboard/Dashboard';
 
 interface Props {
@@ -9,10 +9,8 @@ interface Props {
 }
 
 const TABS: { id: MobileTab; label: string; Icon: React.ElementType }[] = [
-  { id: 'heatmap', label: 'Heat', Icon: Flame },
-  { id: 'news', label: 'News', Icon: Newspaper },
-  { id: 'ai', label: 'AI', Icon: Bot },
-  { id: 'sentiment', label: 'Buzz', Icon: BarChart2 },
+  { id: 'market',   label: 'Market',   Icon: TrendingUp },
+  { id: 'research', label: 'Research', Icon: Newspaper  },
 ];
 
 export default function MobileNav({ activeTab, onTabChange }: Props) {
