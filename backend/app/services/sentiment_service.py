@@ -21,7 +21,7 @@ import uuid
 from datetime import datetime, timezone
 
 import httpx
-from curl_cffi.requests import AsyncSession as CurlSession
+from curl_cffi import requests as cffi_requests
 
 from app.core.config import settings
 
@@ -97,62 +97,67 @@ def _stocktwits_sentiment(msg: dict) -> float:
     return 0.0
 
 
+def _stocktwits_sync(symbol: str, limit: int) -> list[dict]:
+    """
+    Synchronous StockTwits fetch using curl_cffi (Chrome TLS impersonation).
+    Run via run_in_executor to avoid event-loop conflicts with uvicorn's asyncio.
+    """
+    try:
+        resp = cffi_requests.get(
+            f"{STOCKTWITS_BASE}/streams/symbol/{symbol}.json",
+            params={"limit": min(limit, 30)},
+            impersonate="chrome110",
+            timeout=10,
+        )
+        if resp.status_code == 403:
+            logger.warning("StockTwits 403 for %s — Cloudflare block not bypassed", symbol)
+            return []
+        if resp.status_code != 200:
+            logger.debug("StockTwits %s for %s", resp.status_code, symbol)
+            return []
+        return resp.json().get("messages", [])
+    except Exception as exc:
+        logger.warning("StockTwits fetch failed for %s: %s", symbol, exc)
+        return []
+
+
 async def _fetch_stocktwits(symbol: str, limit: int = 30) -> list[SentimentPost]:
     """
     Fetch recent StockTwits messages for a symbol.
-    Uses curl_cffi to impersonate Chrome at the TLS layer, bypassing Cloudflare
-    Bot Management which blocks standard Python HTTP clients with a 403.
-    Native bull/bear tags are used directly — no airlock needed.
+    curl_cffi impersonates Chrome 110 at the TLS layer to bypass Cloudflare.
+    Runs synchronously in a thread pool to avoid asyncio event-loop conflicts.
+    Native bull/bear tags used directly — no airlock needed.
     """
-    async with CurlSession(impersonate="chrome110") as session:
+    loop = asyncio.get_event_loop()
+    messages = await loop.run_in_executor(None, _stocktwits_sync, symbol, limit)
+
+    posts: list[SentimentPost] = []
+    for msg in messages:
+        user = msg.get("user") or {}
+        likes = (msg.get("likes") or {}).get("total", 0)
+        reshares = (msg.get("reshares") or {}).get("reshared_count", 0)
+        engagement = likes + reshares + 1  # +1 so zero-engagement posts still count
+
         try:
-            resp = await session.get(
-                f"{STOCKTWITS_BASE}/streams/symbol/{symbol}.json",
-                params={"limit": min(limit, 30)},
-                timeout=8,
-            )
-            if resp.status_code == 403:
-                logger.warning("StockTwits 403 for %s — Cloudflare block not bypassed", symbol)
-                return []
-            if resp.status_code != 200:
-                logger.debug("StockTwits %s for %s", resp.status_code, symbol)
-                return []
+            dt = datetime.fromisoformat(msg["created_at"].replace("Z", "+00:00"))
+        except Exception:
+            dt = datetime.now(timezone.utc)
 
-            messages = resp.json().get("messages", [])
-            posts: list[SentimentPost] = []
+        posts.append(SentimentPost(
+            id=str(msg.get("id", uuid.uuid4())),
+            ticker=symbol,
+            content=msg.get("body", ""),
+            source="stocktwits",
+            author=user.get("username", "unknown"),
+            engagement=engagement,
+            sentiment_score=_stocktwits_sentiment(msg),
+            relevance_score=8.0,  # ticker-specific by definition
+            catalyst=None,
+            published_at=dt.isoformat(),
+            url=f"https://stocktwits.com/{user.get('username', '')}",
+        ))
 
-            for msg in messages:
-                user = msg.get("user") or {}
-                likes = (msg.get("likes") or {}).get("total", 0)
-                reshares = (msg.get("reshares") or {}).get("reshared_count", 0)
-                engagement = likes + reshares + 1  # +1 so zero-engagement posts still count
-
-                # Parse created_at — StockTwits uses ISO 8601
-                try:
-                    dt = datetime.fromisoformat(
-                        msg["created_at"].replace("Z", "+00:00")
-                    )
-                except Exception:
-                    dt = datetime.now(timezone.utc)
-
-                posts.append(SentimentPost(
-                    id=str(msg.get("id", uuid.uuid4())),
-                    ticker=symbol,
-                    content=msg.get("body", ""),
-                    source="stocktwits",
-                    author=user.get("username", "unknown"),
-                    engagement=engagement,
-                    sentiment_score=_stocktwits_sentiment(msg),
-                    relevance_score=8.0,  # StockTwits posts are ticker-specific by definition
-                    catalyst=None,
-                    published_at=dt.isoformat(),
-                    url=f"https://stocktwits.com/{user.get('username', '')}",
-                ))
-
-            return posts
-        except Exception as exc:
-            logger.warning("StockTwits fetch failed for %s: %s", symbol, exc)
-            return []
+    return posts
 
 
 # ── Reddit ─────────────────────────────────────────────────────────────────────
@@ -255,7 +260,14 @@ async def get_posts(symbol: str, limit: int = 20) -> list[SentimentPost]:
         _fetch_reddit(symbol),
     )
 
-    combined = st_posts + reddit_posts
+    # StockTwits engagement (likes+reshares) is naturally much lower than Reddit
+    # vote counts — a naive global sort starves StockTwits. Guarantee each source
+    # gets up to half the slots, sorted by engagement within its own range.
+    half = max(limit // 2, 5)
+    combined = (
+        sorted(st_posts, key=lambda p: p.engagement, reverse=True)[:half]
+        + sorted(reddit_posts, key=lambda p: p.engagement, reverse=True)[:half]
+    )
     combined.sort(key=lambda p: p.engagement, reverse=True)
     result = combined[:limit]
 
