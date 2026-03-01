@@ -1,8 +1,8 @@
 'use client';
 
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { fetchEarnings, fetchQuotes } from '@/lib/api';
-import type { EarningsEvent, Ticker } from '@/types';
+import { fetchCandles, fetchEarnings, fetchQuotes } from '@/lib/api';
+import type { CandlePoint, EarningsEvent, Ticker } from '@/types';
 
 const POLL_INTERVAL_MS = 15_000; // 15s polling — upgrade to WS when Polygon.io is wired up
 
@@ -68,4 +68,27 @@ export function useEarningsCalendar(symbols: string[]) {
   }, [fetch_]);
 
   return { earnings, loading };
+}
+
+const SPARKLINE_POLL_MS = 5 * 60 * 1000; // 5 minutes — matches Finnhub candle resolution
+
+export function useSparklines(symbols: string[]) {
+  const [sparklines, setSparklines] = useState<Record<string, CandlePoint[]>>({});
+  const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  const fetch_ = useCallback(async () => {
+    if (symbols.length === 0) return;
+    const result = await fetchCandles(symbols);
+    if (!result.error) setSparklines(result.data);
+  }, [symbols]);
+
+  useEffect(() => {
+    void fetch_();
+    intervalRef.current = setInterval(() => void fetch_(), SPARKLINE_POLL_MS);
+    return () => {
+      if (intervalRef.current) clearInterval(intervalRef.current);
+    };
+  }, [fetch_]);
+
+  return { sparklines };
 }

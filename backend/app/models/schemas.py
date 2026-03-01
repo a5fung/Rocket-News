@@ -45,6 +45,11 @@ class MoveTag(_CamelModel):
     change_percent: float     # % change at time of generation
 
 
+class CandlePoint(BaseModel):
+    t: int    # unix timestamp (seconds)
+    c: float  # close price
+
+
 # ─── News ─────────────────────────────────────────────────────────────────────
 
 class NewsTier(int, Enum):

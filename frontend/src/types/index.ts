@@ -6,6 +6,11 @@ export interface MoveTag {
   changePercent: number; // % at time of generation
 }
 
+export interface CandlePoint {
+  t: number; // unix timestamp (seconds)
+  c: number; // close price
+}
+
 export interface EarningsEvent {
   symbol: string;
   reportDate: string;       // "YYYY-MM-DD"

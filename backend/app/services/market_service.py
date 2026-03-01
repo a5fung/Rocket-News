@@ -11,7 +11,7 @@ import time
 import httpx
 
 from app.core.config import settings
-from app.models.schemas import EarningsEvent, Ticker
+from app.models.schemas import CandlePoint, EarningsEvent, Ticker
 
 FINNHUB_BASE = "https://finnhub.io/api/v1"
 
@@ -21,6 +21,10 @@ _profile_cache: dict[str, tuple[str, str]] = {}  # symbol → (name, logo_url)
 # Earnings dates change slowly — 1-hour TTL per symbol
 _earnings_cache: dict[str, tuple[float, EarningsEvent | None]] = {}  # symbol → (ts, event)
 _EARNINGS_TTL = 3600.0
+
+# Intraday candles — 5-min TTL (candles update every 5 min during market hours)
+_candles_cache: dict[str, tuple[float, list[CandlePoint]]] = {}  # symbol → (ts, points)
+_CANDLES_TTL = 300.0
 
 
 async def get_quote(symbol: str) -> Ticker | None:
@@ -143,3 +147,56 @@ async def get_earnings_calendar(symbols: list[str]) -> list[EarningsEvent]:
     """Fetch upcoming earnings events for a list of symbols concurrently."""
     results = await asyncio.gather(*[_get_earnings_for_symbol(s) for s in symbols])
     return [r for r in results if r is not None]
+
+
+async def _get_candles_for_symbol(symbol: str) -> list[CandlePoint]:
+    """Fetch today's 5-minute intraday candles for a single symbol."""
+    now_mono = time.monotonic()
+    cached = _candles_cache.get(symbol)
+    if cached and (now_mono - cached[0]) < _CANDLES_TTL:
+        return cached[1]
+
+    if not settings.finnhub_api_key:
+        return []
+
+    from datetime import datetime, timezone
+    now_ts = int(datetime.now(timezone.utc).timestamp())
+    from_ts = now_ts - 8 * 3600  # last 8 hours always covers the full US trading session
+
+    try:
+        async with httpx.AsyncClient() as client:
+            resp = await client.get(
+                f"{FINNHUB_BASE}/stock/candle",
+                params={
+                    "symbol": symbol,
+                    "resolution": "5",
+                    "from": from_ts,
+                    "to": now_ts,
+                    "token": settings.finnhub_api_key,
+                },
+                timeout=8,
+            )
+        if resp.status_code != 200:
+            _candles_cache[symbol] = (now_mono, [])
+            return []
+
+        data = resp.json()
+        if data.get("s") != "ok":
+            _candles_cache[symbol] = (now_mono, [])
+            return []
+
+        points = [
+            CandlePoint(t=t, c=c)
+            for t, c in zip(data.get("t", []), data.get("c", []))
+        ]
+        _candles_cache[symbol] = (now_mono, points)
+        return points
+    except Exception:
+        _candles_cache[symbol] = (now_mono, [])
+        return []
+
+
+async def get_candles_batch(symbols: list[str]) -> dict[str, list[CandlePoint]]:
+    """Fetch intraday candles for multiple symbols concurrently."""
+    results = await asyncio.gather(*[_get_candles_for_symbol(s) for s in symbols])
+    return {symbol: pts for symbol, pts in zip(symbols, results)}

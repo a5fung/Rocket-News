@@ -1,6 +1,6 @@
 from fastapi import APIRouter, HTTPException, Query
 
-from app.models.schemas import EarningsEvent, MoveTag, Ticker
+from app.models.schemas import CandlePoint, EarningsEvent, MoveTag, Ticker
 from app.services import explain_service, market_service
 
 router = APIRouter(prefix="/market", tags=["market"])
@@ -27,6 +27,14 @@ async def get_earnings(symbols: str = Query(..., description="Comma-separated ti
     if not symbol_list:
         raise HTTPException(status_code=400, detail="No symbols provided")
     return await market_service.get_earnings_calendar(symbol_list)
+
+
+@router.get("/candles", response_model=dict[str, list[CandlePoint]])
+async def get_candles(symbols: str = Query(..., description="Comma-separated ticker symbols")):
+    symbol_list = [s.strip().upper() for s in symbols.split(",") if s.strip()]
+    if not symbol_list:
+        raise HTTPException(status_code=400, detail="No symbols provided")
+    return await market_service.get_candles_batch(symbol_list)
 
 
 @router.get("/quote/{symbol}", response_model=Ticker, response_model_by_alias=True)

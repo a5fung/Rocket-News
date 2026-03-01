@@ -1,7 +1,7 @@
 'use client';
 
 import { useMemo, useState } from 'react';
-import type { EarningsEvent, Ticker } from '@/types';
+import type { CandlePoint, EarningsEvent, Ticker } from '@/types';
 
 function TickerLogo({ url, symbol }: { url?: string; symbol: string }) {
   const [failed, setFailed] = useState(false);
@@ -27,6 +27,7 @@ interface Props {
   tickers: Ticker[];
   earnings: EarningsEvent[];
   moveTags: Map<string, string>;
+  sparklines: Record<string, CandlePoint[]>;
   loading: boolean;
   error: string | null;
   selectedSymbol: string | null;
@@ -66,6 +67,61 @@ function gridCols(count: number): number {
   return 4;
 }
 
+function Sparkline({ prices, color, symbol }: { prices: CandlePoint[]; color: string; symbol: string }) {
+  if (prices.length < 3) return null;
+
+  const closes = prices.map((p) => p.c);
+  const min = Math.min(...closes);
+  const max = Math.max(...closes);
+  const range = max - min || 1;
+  const W = 100;
+  const H = 32;
+
+  const pts = closes
+    .map((c, i) => {
+      const x = (i / (closes.length - 1)) * W;
+      const y = H - ((c - min) / range) * (H - 2) - 1; // 1px padding top/bottom
+      return `${x.toFixed(1)},${y.toFixed(1)}`;
+    })
+    .join(' ');
+
+  // Area fill path: line down to bottom-right, across to bottom-left, close
+  const lastX = W.toFixed(1);
+  const firstPt = pts.split(' ')[0];
+  const areaPath = `M${firstPt} ${closes.slice(1).map((c, i) => {
+    const x = ((i + 1) / (closes.length - 1)) * W;
+    const y = H - ((c - min) / range) * (H - 2) - 1;
+    return `L${x.toFixed(1)},${y.toFixed(1)}`;
+  }).join(' ')} L${lastX},${H} L0,${H} Z`;
+
+  const gradId = `sg-${symbol}`;
+
+  return (
+    <svg
+      viewBox={`0 0 ${W} ${H}`}
+      preserveAspectRatio="none"
+      className="absolute bottom-0 left-0 w-full pointer-events-none"
+      style={{ height: H, opacity: 0.38 }}
+    >
+      <defs>
+        <linearGradient id={gradId} x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%" stopColor={color} stopOpacity="0.5" />
+          <stop offset="100%" stopColor={color} stopOpacity="0" />
+        </linearGradient>
+      </defs>
+      <path d={areaPath} fill={`url(#${gradId})`} />
+      <polyline
+        points={pts}
+        fill="none"
+        stroke={color}
+        strokeWidth="1.5"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </svg>
+  );
+}
+
 function SkeletonTile() {
   return <div className="rounded-md bg-surface-border animate-pulse" />;
 }
@@ -82,6 +138,7 @@ function TickerTile({
   maxAbs,
   earningsEvent,
   moveTag,
+  sparkline,
   onClick,
 }: {
   ticker: Ticker;
@@ -89,6 +146,7 @@ function TickerTile({
   maxAbs: number;
   earningsEvent?: EarningsEvent;
   moveTag?: string;
+  sparkline?: CandlePoint[];
   onClick: () => void;
 }) {
   const { bg, text } = getTileColor(ticker.changePercent, maxAbs);
@@ -121,6 +179,11 @@ function TickerTile({
         ${selected ? 'ring-2 ring-white ring-offset-1 ring-offset-surface' : 'hover:brightness-125'}`}
       style={{ backgroundColor: bg }}
     >
+      {/* Intraday sparkline — absolute overlay at bottom */}
+      {sparkline && sparkline.length >= 3 && (
+        <Sparkline prices={sparkline} color={text} symbol={ticker.symbol} />
+      )}
+
       {/* Earnings badge — top-left */}
       {earningsBadge}
 
@@ -166,7 +229,7 @@ function TickerTile({
   );
 }
 
-export default function Q1Heatmap({ tickers, earnings, moveTags, loading, error, selectedSymbol, onSelectTicker }: Props) {
+export default function Q1Heatmap({ tickers, earnings, moveTags, sparklines, loading, error, selectedSymbol, onSelectTicker }: Props) {
   const [sortMode, setSortMode] = useState<SortMode>('change');
   const earningsMap = new Map(earnings.map((e) => [e.symbol, e]));
 
@@ -252,6 +315,7 @@ export default function Q1Heatmap({ tickers, earnings, moveTags, loading, error,
                 maxAbs={maxAbs}
                 earningsEvent={earningsMap.get(t.symbol)}
                 moveTag={moveTags.get(t.symbol)}
+                sparkline={sparklines[t.symbol]}
                 onClick={() => onSelectTicker(t.symbol)}
               />
             ))}

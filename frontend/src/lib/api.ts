@@ -1,5 +1,6 @@
 import type {
   ApiResult,
+  CandlePoint,
   ChatMessage,
   DashboardContext,
   EarningsEvent,
@@ -47,6 +48,10 @@ export async function fetchQuote(symbol: string): Promise<ApiResult<Ticker>> {
 
 export async function fetchEarnings(symbols: string[]): Promise<ApiResult<EarningsEvent[]>> {
   return request<EarningsEvent[]>(`/market/earnings?symbols=${symbols.join(',')}`);
+}
+
+export async function fetchCandles(symbols: string[]): Promise<ApiResult<Record<string, CandlePoint[]>>> {
+  return request<Record<string, CandlePoint[]>>(`/market/candles?symbols=${symbols.join(',')}`);
 }
 
 export async function fetchMoveTags(
