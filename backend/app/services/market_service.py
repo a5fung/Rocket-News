@@ -5,15 +5,22 @@ Free tier: 60 requests/minute, 15-min delayed quotes.
 Upgrade path: Polygon.io WebSocket for real-time.
 """
 
+import asyncio
+import time
+
 import httpx
 
 from app.core.config import settings
-from app.models.schemas import Ticker
+from app.models.schemas import EarningsEvent, Ticker
 
 FINNHUB_BASE = "https://finnhub.io/api/v1"
 
 # Company names rarely change — cache profiles for 24 hours to halve Finnhub call count
 _profile_cache: dict[str, str] = {}  # symbol → company name
+
+# Earnings dates change slowly — 1-hour TTL per symbol
+_earnings_cache: dict[str, tuple[float, EarningsEvent | None]] = {}  # symbol → (ts, event)
+_EARNINGS_TTL = 3600.0
 
 
 async def get_quote(symbol: str) -> Ticker | None:
@@ -72,3 +79,63 @@ async def _get_profile(client: httpx.AsyncClient, symbol: str) -> dict:
         return resp.json() if resp.status_code == 200 else {}
     except Exception:
         return {}
+
+
+async def _get_earnings_for_symbol(symbol: str) -> EarningsEvent | None:
+    """Fetch upcoming earnings for a single symbol within the next 7 days."""
+    now = time.monotonic()
+    cached = _earnings_cache.get(symbol)
+    if cached and (now - cached[0]) < _EARNINGS_TTL:
+        return cached[1]
+
+    if not settings.finnhub_api_key:
+        _earnings_cache[symbol] = (now, None)
+        return None
+
+    from datetime import date, timedelta
+    today = date.today()
+    to_date = today + timedelta(days=7)
+
+    try:
+        async with httpx.AsyncClient() as client:
+            resp = await client.get(
+                f"{FINNHUB_BASE}/calendar/earnings",
+                params={
+                    "from": today.isoformat(),
+                    "to": to_date.isoformat(),
+                    "symbol": symbol,
+                    "token": settings.finnhub_api_key,
+                },
+                timeout=8,
+            )
+        if resp.status_code != 200:
+            _earnings_cache[symbol] = (now, None)
+            return None
+
+        events = resp.json().get("earningsCalendar", [])
+        if not events:
+            _earnings_cache[symbol] = (now, None)
+            return None
+
+        ev = events[0]
+        quarter = ev.get("quarter")
+        year = ev.get("year")
+        fiscal_quarter = f"Q{quarter} {year}" if quarter and year else ""
+        result = EarningsEvent(
+            symbol=symbol,
+            report_date=ev.get("date", ""),
+            fiscal_quarter=fiscal_quarter,
+            hour=ev.get("hour") or None,
+            eps_estimate=ev.get("epsEstimate") or None,
+        )
+        _earnings_cache[symbol] = (now, result)
+        return result
+    except Exception:
+        _earnings_cache[symbol] = (now, None)
+        return None
+
+
+async def get_earnings_calendar(symbols: list[str]) -> list[EarningsEvent]:
+    """Fetch upcoming earnings events for a list of symbols concurrently."""
+    results = await asyncio.gather(*[_get_earnings_for_symbol(s) for s in symbols])
+    return [r for r in results if r is not None]

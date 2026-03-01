@@ -2,6 +2,7 @@ import type {
   ApiResult,
   ChatMessage,
   DashboardContext,
+  EarningsEvent,
   NewsItem,
   SentimentBundle,
   SentimentDataPoint,
@@ -41,6 +42,10 @@ export async function fetchQuotes(symbols: string[]): Promise<ApiResult<Ticker[]
 
 export async function fetchQuote(symbol: string): Promise<ApiResult<Ticker>> {
   return request<Ticker>(`/market/quote/${symbol}`);
+}
+
+export async function fetchEarnings(symbols: string[]): Promise<ApiResult<EarningsEvent[]>> {
+  return request<EarningsEvent[]>(`/market/earnings?symbols=${symbols.join(',')}`);
 }
 
 // ─── News ─────────────────────────────────────────────────────────────────────

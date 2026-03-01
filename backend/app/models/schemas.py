@@ -28,6 +28,16 @@ class Ticker(_CamelModel):
     sentiment: SentimentScore | None = None
 
 
+# ─── Earnings ─────────────────────────────────────────────────────────────────
+
+class EarningsEvent(_CamelModel):
+    symbol: str
+    report_date: str          # "YYYY-MM-DD"
+    fiscal_quarter: str       # "Q1 2026"
+    hour: str | None = None   # "amc" | "bmo" | "dmh"
+    eps_estimate: float | None = None
+
+
 # ─── News ─────────────────────────────────────────────────────────────────────
 
 class NewsTier(int, Enum):

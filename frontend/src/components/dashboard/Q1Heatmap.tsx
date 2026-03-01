@@ -1,10 +1,11 @@
 'use client';
 
 import { useState } from 'react';
-import type { Ticker } from '@/types';
+import type { EarningsEvent, Ticker } from '@/types';
 
 interface Props {
   tickers: Ticker[];
+  earnings: EarningsEvent[];
   loading: boolean;
   error: string | null;
   selectedSymbol: string | null;
@@ -48,19 +49,46 @@ function SkeletonTile() {
   return <div className="rounded-md bg-surface-border animate-pulse" />;
 }
 
+function earningsBadgeColor(diffDays: number): string {
+  if (diffDays === 0) return 'bg-red-500/90';
+  if (diffDays <= 3) return 'bg-orange-500/90';
+  return 'bg-amber-500/90';
+}
+
 function TickerTile({
   ticker,
   selected,
   maxAbs,
+  earningsEvent,
   onClick,
 }: {
   ticker: Ticker;
   selected: boolean;
   maxAbs: number;
+  earningsEvent?: EarningsEvent;
   onClick: () => void;
 }) {
   const { bg, text } = getTileColor(ticker.changePercent, maxAbs);
   const isUp = ticker.changePercent >= 0;
+
+  let earningsBadge: React.ReactNode = null;
+  if (earningsEvent) {
+    const today = new Date().toISOString().slice(0, 10);
+    const diffDays = Math.round(
+      (new Date(earningsEvent.reportDate).getTime() - new Date(today).getTime()) / 86400000,
+    );
+    if (diffDays >= 0 && diffDays <= 7) {
+      const label = diffDays === 0 ? 'today' : diffDays === 1 ? 'tmrw' : `${diffDays}d`;
+      earningsBadge = (
+        <span
+          className={`absolute top-1.5 left-1.5 text-[9px] font-bold px-1 py-0.5 rounded
+            leading-none text-white ${earningsBadgeColor(diffDays)}`}
+        >
+          E·{label}
+        </span>
+      );
+    }
+  }
 
   return (
     <button
@@ -70,7 +98,10 @@ function TickerTile({
         ${selected ? 'ring-2 ring-white ring-offset-1 ring-offset-surface' : 'hover:brightness-125'}`}
       style={{ backgroundColor: bg }}
     >
-      {/* Sentiment dot */}
+      {/* Earnings badge — top-left */}
+      {earningsBadge}
+
+      {/* Sentiment dot — top-right */}
       {ticker.sentiment && (
         <span
           className={`absolute top-1.5 right-1.5 w-1.5 h-1.5 rounded-full ${
@@ -101,8 +132,9 @@ function TickerTile({
   );
 }
 
-export default function Q1Heatmap({ tickers, loading, error, selectedSymbol, onSelectTicker }: Props) {
+export default function Q1Heatmap({ tickers, earnings, loading, error, selectedSymbol, onSelectTicker }: Props) {
   const [sortMode, setSortMode] = useState<SortMode>('change');
+  const earningsMap = new Map(earnings.map((e) => [e.symbol, e]));
 
   const sorted = [...tickers].sort((a, b) =>
     sortMode === 'alpha'
@@ -180,6 +212,7 @@ export default function Q1Heatmap({ tickers, loading, error, selectedSymbol, onS
                 ticker={t}
                 selected={t.symbol === selectedSymbol}
                 maxAbs={maxAbs}
+                earningsEvent={earningsMap.get(t.symbol)}
                 onClick={() => onSelectTicker(t.symbol)}
               />
             ))}

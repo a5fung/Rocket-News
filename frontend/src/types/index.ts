@@ -1,5 +1,13 @@
 // ─── Market ───────────────────────────────────────────────────────────────────
 
+export interface EarningsEvent {
+  symbol: string;
+  reportDate: string;       // "YYYY-MM-DD"
+  fiscalQuarter: string;    // "Q1 2026"
+  hour?: string;            // "amc" | "bmo" | "dmh"
+  epsEstimate?: number;
+}
+
 export interface Ticker {
   symbol: string;
   name: string;
