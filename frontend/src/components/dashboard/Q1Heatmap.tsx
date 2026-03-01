@@ -3,6 +3,26 @@
 import { useState } from 'react';
 import type { EarningsEvent, Ticker } from '@/types';
 
+function TickerLogo({ url, symbol }: { url?: string; symbol: string }) {
+  const [failed, setFailed] = useState(false);
+  if (!url || failed) {
+    return (
+      <span className="w-4 h-4 rounded-full bg-white/20 flex items-center justify-center
+        text-[7px] font-bold text-white/70 shrink-0 leading-none">
+        {symbol[0]}
+      </span>
+    );
+  }
+  return (
+    <img
+      src={url}
+      alt=""
+      className="w-4 h-4 rounded-full object-contain bg-white/10 shrink-0"
+      onError={() => setFailed(true)}
+    />
+  );
+}
+
 interface Props {
   tickers: Ticker[];
   earnings: EarningsEvent[];
@@ -114,8 +134,11 @@ function TickerTile({
         />
       )}
 
-      {/* Symbol */}
-      <span className="font-bold text-sm text-white leading-none">{ticker.symbol}</span>
+      {/* Logo + Symbol */}
+      <div className="flex items-center gap-1">
+        <TickerLogo url={ticker.logoUrl} symbol={ticker.symbol} />
+        <span className="font-bold text-sm text-white leading-none">{ticker.symbol}</span>
+      </div>
 
       {/* % Change — most prominent */}
       <span className="font-bold text-lg leading-tight mt-0.5" style={{ color: text }}>

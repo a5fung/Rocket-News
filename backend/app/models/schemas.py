@@ -26,6 +26,7 @@ class Ticker(_CamelModel):
     volume: int | None = None
     market_cap: float | None = None
     sentiment: SentimentScore | None = None
+    logo_url: str | None = None
 
 
 # ─── Earnings ─────────────────────────────────────────────────────────────────

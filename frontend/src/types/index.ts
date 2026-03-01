@@ -23,6 +23,7 @@ export interface Ticker {
   volume?: number;
   marketCap?: number;
   sentiment?: SentimentScore;
+  logoUrl?: string;
 }
 
 // ─── News ─────────────────────────────────────────────────────────────────────

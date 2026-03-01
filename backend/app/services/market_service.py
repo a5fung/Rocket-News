@@ -15,8 +15,8 @@ from app.models.schemas import EarningsEvent, Ticker
 
 FINNHUB_BASE = "https://finnhub.io/api/v1"
 
-# Company names rarely change — cache profiles for 24 hours to halve Finnhub call count
-_profile_cache: dict[str, str] = {}  # symbol → company name
+# Company names/logos rarely change — cache profiles for process lifetime
+_profile_cache: dict[str, tuple[str, str]] = {}  # symbol → (name, logo_url)
 
 # Earnings dates change slowly — 1-hour TTL per symbol
 _earnings_cache: dict[str, tuple[float, EarningsEvent | None]] = {}  # symbol → (ts, event)
@@ -47,11 +47,14 @@ async def get_quote(symbol: str) -> Ticker | None:
         if price == 0:
             return None
 
-        name = _profile_cache.get(symbol)
-        if name is None:
+        cached = _profile_cache.get(symbol)
+        if cached is None:
             profile = await _get_profile(client, symbol)
             name = profile.get("name", symbol) or symbol
-            _profile_cache[symbol] = name
+            logo_url = profile.get("logo") or ""
+            _profile_cache[symbol] = (name, logo_url)
+        else:
+            name, logo_url = cached
 
         return Ticker(
             symbol=symbol,
@@ -59,6 +62,7 @@ async def get_quote(symbol: str) -> Ticker | None:
             price=float(price),
             change=float(change),
             change_percent=float(change_pct),
+            logo_url=logo_url or None,
         )
 
 

@@ -63,7 +63,8 @@ async def _explain_symbol(symbol: str, change_pct: float) -> MoveTag | None:
         "\n".join(f"- {h}" for h in headlines) if headlines else "- No recent news found"
     )
 
-    company = _profile_cache.get(symbol, symbol)
+    cached_profile = _profile_cache.get(symbol)
+    company = cached_profile[0] if cached_profile else symbol
     direction = "up" if change_pct >= 0 else "down"
     user_msg = (
         f"Stock: {symbol} ({company})\n"
