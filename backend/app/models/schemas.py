@@ -81,7 +81,7 @@ class SentimentPost(_CamelModel):
     id: str
     ticker: str
     content: str
-    source: Literal["reddit", "x"]
+    source: Literal["reddit", "x", "stocktwits"]
     author: str
     engagement: int
     sentiment_score: float

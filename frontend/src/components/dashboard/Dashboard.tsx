@@ -12,6 +12,7 @@ import Q3AIChat from './Q3AIChat';
 import Q4Sentiment from './Q4Sentiment';
 import MobileNav from '@/components/mobile/MobileNav';
 import WatchlistManager from '@/components/shared/WatchlistManager';
+import RocketLogo from '@/components/shared/RocketLogo';
 
 export type MobileTab = 'heatmap' | 'news' | 'ai' | 'sentiment';
 
@@ -39,8 +40,11 @@ export default function Dashboard() {
     <div className="flex flex-col h-screen overflow-hidden">
       {/* Top bar */}
       <header className="flex items-center justify-between px-4 py-2 border-b border-surface-border bg-surface-raised shrink-0">
-        <div className="flex items-center gap-2">
-          <span className="text-accent font-bold text-lg tracking-tight">Rocket News</span>
+        <div className="flex items-center gap-2.5">
+          <RocketLogo size={32} showText={false} />
+          <span className="font-bold text-lg tracking-tight text-white">
+            Rocket <span className="text-accent">News</span>
+          </span>
           <span className="text-gray-500 text-xs">· {symbols.length} stocks</span>
         </div>
         <WatchlistManager symbols={symbols} onAdd={add} onRemove={remove} />

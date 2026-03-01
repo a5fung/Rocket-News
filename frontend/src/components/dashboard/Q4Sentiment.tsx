@@ -183,7 +183,12 @@ export default function Q4Sentiment({ selectedSymbol, symbols }: Props) {
               >
                 <div className="flex items-center justify-between gap-2">
                   <span className="text-xs text-gray-500 truncate">
-                    r/{post.author}
+                    {post.source === 'stocktwits'
+                      ? <span className="text-blue-400 font-medium">ST·</span>
+                      : post.source === 'reddit'
+                      ? 'r/'
+                      : ''}
+                    {post.author}
                   </span>
                   <div className="flex items-center gap-2 shrink-0">
                     <span className="text-xs text-gray-600">{post.engagement}pts</span>

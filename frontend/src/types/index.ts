@@ -42,7 +42,7 @@ export interface NewsItem {
 // ─── Sentiment ────────────────────────────────────────────────────────────────
 
 export type SentimentTrend = 'rising' | 'falling' | 'neutral';
-export type SentimentSource = 'reddit' | 'x';
+export type SentimentSource = 'reddit' | 'x' | 'stocktwits';
 
 export interface SentimentScore {
   score: number;          // -1 to 1 aggregate
