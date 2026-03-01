@@ -1,8 +1,9 @@
-import type { WatchlistEntry } from '@/types';
+import type { PortfolioPosition, WatchlistEntry } from '@/types';
 
 const KEYS = {
   watchlist: 'rn_watchlist',
   apiKey: 'rn_api_key',
+  portfolio: 'rn_portfolio',
 } as const;
 
 function safeGet<T>(key: string, fallback: T): T {
@@ -40,6 +41,24 @@ export function addToWatchlist(symbol: string): void {
 export function removeFromWatchlist(symbol: string): void {
   const list = getWatchlist().filter((e) => e.symbol !== symbol.toUpperCase());
   safeSet(KEYS.watchlist, list);
+}
+
+// ─── Portfolio positions ───────────────────────────────────────────────────────
+
+export function getPortfolio(): Record<string, PortfolioPosition> {
+  return safeGet<Record<string, PortfolioPosition>>(KEYS.portfolio, {});
+}
+
+export function setPosition(symbol: string, pos: PortfolioPosition): void {
+  const portfolio = getPortfolio();
+  portfolio[symbol.toUpperCase()] = pos;
+  safeSet(KEYS.portfolio, portfolio);
+}
+
+export function clearPosition(symbol: string): void {
+  const portfolio = getPortfolio();
+  delete portfolio[symbol.toUpperCase()];
+  safeSet(KEYS.portfolio, portfolio);
 }
 
 // ─── Gemini API Key (stored in browser only, never sent to our servers at rest) ──

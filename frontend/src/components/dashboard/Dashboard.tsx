@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
+import { usePortfolio } from '@/hooks/usePortfolio';
 import { useWatchlist } from '@/hooks/useWatchlist';
 import { useEarningsCalendar, useMarketData, useSparklines } from '@/hooks/useMarketData';
 import { useExplainMove } from '@/hooks/useExplainMove';
@@ -14,6 +15,7 @@ import Q3AIChat from './Q3AIChat';
 import Q4Sentiment from './Q4Sentiment';
 import MobileNav from '@/components/mobile/MobileNav';
 import AlertsButton from '@/components/shared/AlertsButton';
+import PortfolioManager from '@/components/shared/PortfolioManager';
 import WatchlistManager from '@/components/shared/WatchlistManager';
 import RocketLogo from '@/components/shared/RocketLogo';
 
@@ -26,6 +28,7 @@ export default function Dashboard() {
   const { earnings } = useEarningsCalendar(isLoaded ? symbols : []);
   const { moveTags } = useExplainMove(tickers);
   const { sparklines } = useSparklines(isLoaded ? symbols : []);
+  const { positions, setPosition, clearPosition } = usePortfolio();
   const [selectedSymbol, setSelectedSymbol] = useState<string | null>(null);
   const [mobileTab, setMobileTab] = useState<MobileTab>('heatmap');
 
@@ -62,13 +65,14 @@ export default function Dashboard() {
         </div>
         <div className="flex items-center gap-2">
           <AlertsButton symbols={symbols} />
+          <PortfolioManager symbols={symbols} tickers={tickers} positions={positions} onSet={setPosition} onClear={clearPosition} />
           <WatchlistManager symbols={symbols} onAdd={add} onRemove={remove} />
         </div>
       </header>
 
       {/* ── Desktop layout: 2×2 grid ──────────────────────────────────── */}
       <main className="hidden md:grid grid-cols-2 grid-rows-2 flex-1 gap-2 p-2 overflow-hidden">
-        <Q1Heatmap tickers={tickers} earnings={earnings} moveTags={moveTags} sparklines={sparklines} loading={!isLoaded || marketLoading || (symbols.length > 0 && tickers.length === 0 && !marketError)} error={marketError} {...sharedProps} />
+        <Q1Heatmap tickers={tickers} earnings={earnings} moveTags={moveTags} sparklines={sparklines} positions={positions} loading={!isLoaded || marketLoading || (symbols.length > 0 && tickers.length === 0 && !marketError)} error={marketError} {...sharedProps} />
         <Q2NewsFeed news={news} symbols={symbols} loading={newsLoading} {...sharedProps} />
         <Q3AIChat getContext={getDashboardContext} selectedSymbol={selectedSymbol} tickers={tickers} />
         <Q4Sentiment selectedSymbol={selectedSymbol} symbols={symbols} />
@@ -78,7 +82,7 @@ export default function Dashboard() {
       <main className="flex flex-col flex-1 md:hidden overflow-hidden">
         <div className="flex-1 overflow-hidden">
           {mobileTab === 'heatmap' && (
-            <Q1Heatmap tickers={tickers} earnings={earnings} moveTags={moveTags} sparklines={sparklines} loading={!isLoaded || marketLoading || (symbols.length > 0 && tickers.length === 0 && !marketError)} error={marketError} {...sharedProps} />
+            <Q1Heatmap tickers={tickers} earnings={earnings} moveTags={moveTags} sparklines={sparklines} positions={positions} loading={!isLoaded || marketLoading || (symbols.length > 0 && tickers.length === 0 && !marketError)} error={marketError} {...sharedProps} />
           )}
           {mobileTab === 'news' && (
             <Q2NewsFeed news={news} symbols={symbols} loading={newsLoading} {...sharedProps} />

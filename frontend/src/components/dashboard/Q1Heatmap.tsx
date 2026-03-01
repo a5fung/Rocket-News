@@ -1,7 +1,7 @@
 'use client';
 
 import { useMemo, useState } from 'react';
-import type { CandlePoint, EarningsEvent, Ticker } from '@/types';
+import type { CandlePoint, EarningsEvent, PortfolioPosition, Ticker } from '@/types';
 
 function TickerLogo({ url, symbol }: { url?: string; symbol: string }) {
   const [failed, setFailed] = useState(false);
@@ -28,6 +28,7 @@ interface Props {
   earnings: EarningsEvent[];
   moveTags: Map<string, string>;
   sparklines: Record<string, CandlePoint[]>;
+  positions: Record<string, PortfolioPosition>;
   loading: boolean;
   error: string | null;
   selectedSymbol: string | null;
@@ -132,6 +133,14 @@ function earningsBadgeColor(diffDays: number): string {
   return 'bg-amber-500/90';
 }
 
+function formatPnl(pnl: number): string {
+  const sign = pnl >= 0 ? '+' : '-';
+  const abs = Math.abs(pnl);
+  if (abs >= 1_000_000) return `${sign}$${(abs / 1_000_000).toFixed(2)}M`;
+  if (abs >= 1_000) return `${sign}$${(abs / 1_000).toFixed(1)}k`;
+  return `${sign}$${abs.toFixed(2)}`;
+}
+
 function TickerTile({
   ticker,
   selected,
@@ -139,6 +148,7 @@ function TickerTile({
   earningsEvent,
   moveTag,
   sparkline,
+  position,
   onClick,
 }: {
   ticker: Ticker;
@@ -147,6 +157,7 @@ function TickerTile({
   earningsEvent?: EarningsEvent;
   moveTag?: string;
   sparkline?: CandlePoint[];
+  position?: PortfolioPosition;
   onClick: () => void;
 }) {
   const { bg, text } = getTileColor(ticker.changePercent, maxAbs);
@@ -221,6 +232,16 @@ function TickerTile({
         ${ticker.price.toFixed(2)}
       </span>
 
+      {/* Unrealized P&L — shown when position is set */}
+      {position && (() => {
+        const pnl = (ticker.price - position.costBasis) * position.shares;
+        return (
+          <span className={`text-xs font-mono font-semibold leading-none mt-0.5 ${pnl >= 0 ? 'text-green-300' : 'text-red-300'}`}>
+            {formatPnl(pnl)}
+          </span>
+        );
+      })()}
+
       {/* Company name */}
       <span className="text-xs text-white/40 leading-none mt-0.5 truncate max-w-full px-1">
         {ticker.name}
@@ -229,7 +250,7 @@ function TickerTile({
   );
 }
 
-export default function Q1Heatmap({ tickers, earnings, moveTags, sparklines, loading, error, selectedSymbol, onSelectTicker }: Props) {
+export default function Q1Heatmap({ tickers, earnings, moveTags, sparklines, positions, loading, error, selectedSymbol, onSelectTicker }: Props) {
   const [sortMode, setSortMode] = useState<SortMode>('change');
   const earningsMap = new Map(earnings.map((e) => [e.symbol, e]));
 
@@ -316,6 +337,7 @@ export default function Q1Heatmap({ tickers, earnings, moveTags, sparklines, loa
                 earningsEvent={earningsMap.get(t.symbol)}
                 moveTag={moveTags.get(t.symbol)}
                 sparkline={sparklines[t.symbol]}
+                position={positions[t.symbol]}
                 onClick={() => onSelectTicker(t.symbol)}
               />
             ))}

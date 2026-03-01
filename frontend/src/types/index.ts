@@ -117,6 +117,13 @@ export interface DashboardContext {
   generatedAt: string;          // ISO 8601
 }
 
+// ─── Portfolio ────────────────────────────────────────────────────────────────
+
+export interface PortfolioPosition {
+  shares: number;    // number of shares held
+  costBasis: number; // average cost per share ($)
+}
+
 // ─── Watchlist ────────────────────────────────────────────────────────────────
 
 export interface WatchlistEntry {
