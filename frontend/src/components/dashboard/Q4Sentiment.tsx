@@ -140,9 +140,34 @@ export default function Q4Sentiment({ selectedSymbol, symbols }: Props) {
   return (
     <section className="quadrant">
       <div className="quadrant-header">
-        <span className="quadrant-title">
-          Sentiment · <span className="text-accent">${symbol}</span>
-        </span>
+        <div className="flex flex-col gap-0.5">
+          <span className="quadrant-title">
+            Sentiment · <span className="text-accent">${symbol}</span>
+          </span>
+          {/* Source breakdown — shows which feeds contributed posts */}
+          {posts.length > 0 && (
+            <div className="flex items-center gap-1">
+              {(() => {
+                const st = posts.filter(p => p.source === 'stocktwits').length;
+                const rd = posts.filter(p => p.source === 'reddit').length;
+                return (
+                  <>
+                    {st > 0 && (
+                      <span className="text-xs px-1.5 py-px rounded bg-blue-900/50 text-blue-300">
+                        StockTwits · {st}
+                      </span>
+                    )}
+                    {rd > 0 && (
+                      <span className="text-xs px-1.5 py-px rounded bg-orange-900/40 text-orange-300">
+                        Reddit · {rd}
+                      </span>
+                    )}
+                  </>
+                );
+              })()}
+            </div>
+          )}
+        </div>
         <div className="flex items-center gap-3">
           {score && <span className={`text-xs font-medium capitalize ${trendColor}`}>{score.trend} ↑</span>}
           {loading && <span className="text-xs text-gray-500 animate-pulse">loading…</span>}
@@ -182,14 +207,16 @@ export default function Q4Sentiment({ selectedSymbol, symbols }: Props) {
                   hover:bg-surface-border transition-colors`}
               >
                 <div className="flex items-center justify-between gap-2">
-                  <span className="text-xs text-gray-500 truncate">
-                    {post.source === 'stocktwits'
-                      ? <span className="text-blue-400 font-medium">ST·</span>
-                      : post.source === 'reddit'
-                      ? 'r/'
-                      : ''}
-                    {post.author}
-                  </span>
+                  <div className="flex items-center gap-1.5 truncate">
+                    <span className={`shrink-0 text-xs px-1.5 py-px rounded font-medium ${
+                      post.source === 'stocktwits'
+                        ? 'bg-blue-900/50 text-blue-300'
+                        : 'bg-orange-900/40 text-orange-300'
+                    }`}>
+                      {post.source === 'stocktwits' ? 'StockTwits' : 'Reddit'}
+                    </span>
+                    <span className="text-xs text-gray-500 truncate">{post.author}</span>
+                  </div>
                   <div className="flex items-center gap-2 shrink-0">
                     <span className="text-xs text-gray-600">{post.engagement}pts</span>
                     {post.sentimentScore !== 0 && (

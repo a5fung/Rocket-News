@@ -1,7 +1,7 @@
 'use client';
 
 import { ExternalLink } from 'lucide-react';
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import type { CatalystTag, NewsItem } from '@/types';
 
 interface Props {
@@ -20,6 +20,24 @@ const CATALYST_COLORS: Record<CatalystTag, string> = {
   Contract: 'bg-teal-900 text-teal-300',
   Product: 'bg-indigo-900 text-indigo-300',
   Other: 'bg-gray-700 text-gray-400',
+};
+
+/**
+ * Classify which upstream API a news item came from based on its source label.
+ * SEC EDGAR and Yahoo Finance set their own names; everything else came via Finnhub.
+ */
+type ApiOrigin = 'SEC EDGAR' | 'Yahoo Finance' | 'Finnhub';
+
+function getApiOrigin(source: string): ApiOrigin {
+  if (source === 'SEC EDGAR') return 'SEC EDGAR';
+  if (source.toLowerCase().includes('yahoo')) return 'Yahoo Finance';
+  return 'Finnhub';
+}
+
+const ORIGIN_STYLE: Record<ApiOrigin, string> = {
+  'SEC EDGAR':     'bg-amber-900/50 text-amber-300',
+  'Yahoo Finance': 'bg-purple-900/50 text-purple-300',
+  'Finnhub':       'bg-blue-900/40 text-blue-300',
 };
 
 function timeAgo(iso: string): string {
@@ -65,9 +83,16 @@ function NewsCard({ item }: { item: NewsItem }) {
       <p className="text-sm font-medium leading-snug group-hover:text-gray-100 text-gray-200">
         {item.headline}
       </p>
-      <div className="flex items-center gap-1 mt-0.5">
-        <span className="text-xs text-gray-500">{item.source}</span>
-        <ExternalLink size={10} className="text-gray-600" />
+      <div className="flex items-center gap-1.5 mt-0.5">
+        {/* API origin badge — tells you which feed this came from */}
+        <span className={`text-xs px-1.5 py-0.5 rounded font-medium ${ORIGIN_STYLE[getApiOrigin(item.source)]}`}>
+          {getApiOrigin(item.source)}
+        </span>
+        {/* Outlet name — the actual publisher within that feed */}
+        {item.source !== 'SEC EDGAR' && item.source !== 'Yahoo Finance' && (
+          <span className="text-xs text-gray-500 truncate">{item.source}</span>
+        )}
+        <ExternalLink size={10} className="text-gray-600 ml-auto shrink-0" />
       </div>
     </a>
   );
@@ -81,10 +106,31 @@ export default function Q2NewsFeed({ news, symbols, selectedSymbol }: Props) {
     ? news.filter((n) => n.tickers.includes(activeTicker))
     : news;
 
+  // Derive which upstream API sources contributed to the current view
+  const activeOrigins = useMemo(() => {
+    const origins = new Set<ApiOrigin>();
+    filtered.forEach((n) => origins.add(getApiOrigin(n.source)));
+    return origins;
+  }, [filtered]);
+
   return (
     <section className="quadrant">
       <div className="quadrant-header">
-        <span className="quadrant-title">News</span>
+        <div className="flex flex-col gap-0.5">
+          <span className="quadrant-title">News</span>
+          {/* Live source legend — updates as ticker filter changes */}
+          {filtered.length > 0 && (
+            <div className="flex items-center gap-1">
+              {(['Finnhub', 'Yahoo Finance', 'SEC EDGAR'] as ApiOrigin[])
+                .filter((o) => activeOrigins.has(o))
+                .map((o) => (
+                  <span key={o} className={`text-xs px-1.5 py-px rounded ${ORIGIN_STYLE[o]}`}>
+                    {o}
+                  </span>
+                ))}
+            </div>
+          )}
+        </div>
         <div className="flex gap-1 flex-wrap">
           <button
             onClick={() => setFilterTicker(null)}
