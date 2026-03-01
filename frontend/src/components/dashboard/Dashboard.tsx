@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { usePortfolio } from '@/hooks/usePortfolio';
 import { useWatchlist } from '@/hooks/useWatchlist';
 import { useEarningsCalendar, useMarketData, useSparklines } from '@/hooks/useMarketData';
@@ -31,6 +31,8 @@ export default function Dashboard() {
   const { positions, setPosition, clearPosition } = usePortfolio();
   const [selectedSymbol, setSelectedSymbol] = useState<string | null>(null);
   const [mobileTab, setMobileTab] = useState<MobileTab>('market');
+  const swipeStartX = useRef(0);
+  const swipeStartY = useRef(0);
 
   // Sync watchlist to the backend alert scout whenever it changes
   useEffect(() => {
@@ -80,15 +82,29 @@ export default function Dashboard() {
 
       {/* ── Mobile layout: 2-tab split-pane ────────────────────────────── */}
       <main className="flex flex-col flex-1 md:hidden overflow-hidden">
-        <div className="flex-1 min-h-0 overflow-hidden">
+        <div
+          className="flex-1 min-h-0 overflow-hidden"
+          onTouchStart={(e) => {
+            swipeStartX.current = e.touches[0].clientX;
+            swipeStartY.current = e.touches[0].clientY;
+          }}
+          onTouchEnd={(e) => {
+            const dx = e.changedTouches[0].clientX - swipeStartX.current;
+            const dy = Math.abs(e.changedTouches[0].clientY - swipeStartY.current);
+            if (Math.abs(dx) > 60 && dy < 80) {
+              if (dx < 0 && mobileTab === 'market')   setMobileTab('research');
+              if (dx > 0 && mobileTab === 'research') setMobileTab('market');
+            }
+          }}
+        >
 
           {/* Market tab: Heatmap (top 45%) + Sentiment (bottom 55%) */}
           {mobileTab === 'market' && (
             <div className="flex flex-col h-full">
-              <div className="h-[45%] min-h-0 overflow-hidden border-b border-surface-border">
+              <div className="h-[45%] min-h-0 border-b border-surface-border grid">
                 <Q1Heatmap tickers={tickers} earnings={earnings} moveTags={moveTags} sparklines={sparklines} positions={positions} loading={!isLoaded || marketLoading || (symbols.length > 0 && tickers.length === 0 && !marketError)} error={marketError} {...sharedProps} />
               </div>
-              <div className="flex-1 min-h-0 overflow-hidden">
+              <div className="flex-1 min-h-0 grid">
                 <Q4Sentiment selectedSymbol={selectedSymbol} symbols={symbols} />
               </div>
             </div>
@@ -97,10 +113,10 @@ export default function Dashboard() {
           {/* Research tab: News (top 55%) + AI Chat (bottom 45%) */}
           {mobileTab === 'research' && (
             <div className="flex flex-col h-full">
-              <div className="h-[55%] min-h-0 overflow-hidden border-b border-surface-border">
+              <div className="h-[55%] min-h-0 border-b border-surface-border grid">
                 <Q2NewsFeed news={news} symbols={symbols} loading={newsLoading} {...sharedProps} />
               </div>
-              <div className="flex-1 min-h-0 overflow-hidden">
+              <div className="flex-1 min-h-0 grid">
                 <Q3AIChat getContext={getDashboardContext} selectedSymbol={selectedSymbol} tickers={tickers} />
               </div>
             </div>
