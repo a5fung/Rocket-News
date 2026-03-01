@@ -38,6 +38,12 @@ class EarningsEvent(_CamelModel):
     eps_estimate: float | None = None
 
 
+class MoveTag(_CamelModel):
+    symbol: str
+    tag: str                  # e.g. "Earnings Beat", "Contract Award"
+    change_percent: float     # % change at time of generation
+
+
 # ─── News ─────────────────────────────────────────────────────────────────────
 
 class NewsTier(int, Enum):

@@ -3,6 +3,7 @@ import type {
   ChatMessage,
   DashboardContext,
   EarningsEvent,
+  MoveTag,
   NewsItem,
   SentimentBundle,
   SentimentDataPoint,
@@ -46,6 +47,14 @@ export async function fetchQuote(symbol: string): Promise<ApiResult<Ticker>> {
 
 export async function fetchEarnings(symbols: string[]): Promise<ApiResult<EarningsEvent[]>> {
   return request<EarningsEvent[]>(`/market/earnings?symbols=${symbols.join(',')}`);
+}
+
+export async function fetchMoveTags(
+  movers: Array<{ symbol: string; changePercent: number }>,
+): Promise<ApiResult<MoveTag[]>> {
+  const symbols = movers.map((m) => m.symbol).join(',');
+  const changes = movers.map((m) => m.changePercent.toFixed(2)).join(',');
+  return request<MoveTag[]>(`/market/explain?symbols=${symbols}&changes=${changes}`);
 }
 
 // ─── News ─────────────────────────────────────────────────────────────────────

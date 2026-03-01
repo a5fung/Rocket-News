@@ -6,6 +6,7 @@ import type { EarningsEvent, Ticker } from '@/types';
 interface Props {
   tickers: Ticker[];
   earnings: EarningsEvent[];
+  moveTags: Map<string, string>;
   loading: boolean;
   error: string | null;
   selectedSymbol: string | null;
@@ -60,12 +61,14 @@ function TickerTile({
   selected,
   maxAbs,
   earningsEvent,
+  moveTag,
   onClick,
 }: {
   ticker: Ticker;
   selected: boolean;
   maxAbs: number;
   earningsEvent?: EarningsEvent;
+  moveTag?: string;
   onClick: () => void;
 }) {
   const { bg, text } = getTileColor(ticker.changePercent, maxAbs);
@@ -119,6 +122,14 @@ function TickerTile({
         {isUp ? '+' : ''}{ticker.changePercent.toFixed(2)}%
       </span>
 
+      {/* Move reason tag */}
+      {moveTag && (
+        <span className="text-[8px] font-semibold px-1.5 py-0.5 rounded-full leading-none
+          bg-white/10 text-white/80 border border-white/15 mt-0.5 max-w-full truncate">
+          {moveTag}
+        </span>
+      )}
+
       {/* Price */}
       <span className="text-xs text-white/70 leading-none mt-0.5 font-mono">
         ${ticker.price.toFixed(2)}
@@ -132,7 +143,7 @@ function TickerTile({
   );
 }
 
-export default function Q1Heatmap({ tickers, earnings, loading, error, selectedSymbol, onSelectTicker }: Props) {
+export default function Q1Heatmap({ tickers, earnings, moveTags, loading, error, selectedSymbol, onSelectTicker }: Props) {
   const [sortMode, setSortMode] = useState<SortMode>('change');
   const earningsMap = new Map(earnings.map((e) => [e.symbol, e]));
 
@@ -213,6 +224,7 @@ export default function Q1Heatmap({ tickers, earnings, loading, error, selectedS
                 selected={t.symbol === selectedSymbol}
                 maxAbs={maxAbs}
                 earningsEvent={earningsMap.get(t.symbol)}
+                moveTag={moveTags.get(t.symbol)}
                 onClick={() => onSelectTicker(t.symbol)}
               />
             ))}

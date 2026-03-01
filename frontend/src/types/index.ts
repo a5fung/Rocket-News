@@ -1,5 +1,11 @@
 // ─── Market ───────────────────────────────────────────────────────────────────
 
+export interface MoveTag {
+  symbol: string;
+  tag: string;           // e.g. "Earnings Beat", "Contract Award"
+  changePercent: number; // % at time of generation
+}
+
 export interface EarningsEvent {
   symbol: string;
   reportDate: string;       // "YYYY-MM-DD"

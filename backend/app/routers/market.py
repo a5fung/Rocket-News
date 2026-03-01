@@ -1,9 +1,24 @@
 from fastapi import APIRouter, HTTPException, Query
 
-from app.models.schemas import EarningsEvent, Ticker
-from app.services import market_service
+from app.models.schemas import EarningsEvent, MoveTag, Ticker
+from app.services import explain_service, market_service
 
 router = APIRouter(prefix="/market", tags=["market"])
+
+
+@router.get("/explain", response_model=list[MoveTag], response_model_by_alias=True)
+async def get_explain(
+    symbols: str = Query(..., description="Comma-separated ticker symbols"),
+    changes: str = Query(..., description="Comma-separated % changes matching symbols"),
+):
+    symbol_list = [s.strip().upper() for s in symbols.split(",") if s.strip()]
+    try:
+        change_list = [float(c) for c in changes.split(",") if c.strip()]
+    except ValueError:
+        raise HTTPException(status_code=400, detail="changes must be numeric")
+    if not symbol_list or len(symbol_list) != len(change_list):
+        raise HTTPException(status_code=400, detail="symbols and changes must be equal length")
+    return await explain_service.explain_moves(symbol_list, change_list)
 
 
 @router.get("/earnings", response_model=list[EarningsEvent], response_model_by_alias=True)

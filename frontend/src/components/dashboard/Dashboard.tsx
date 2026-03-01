@@ -3,6 +3,7 @@
 import { useMemo, useState } from 'react';
 import { useWatchlist } from '@/hooks/useWatchlist';
 import { useEarningsCalendar, useMarketData } from '@/hooks/useMarketData';
+import { useExplainMove } from '@/hooks/useExplainMove';
 import { useNews } from '@/hooks/useNews';
 import type { DashboardContext } from '@/types';
 
@@ -21,6 +22,7 @@ export default function Dashboard() {
   const { tickers, loading: marketLoading, error: marketError } = useMarketData(isLoaded ? symbols : []);
   const { news, loading: newsLoading } = useNews(isLoaded ? symbols : []);
   const { earnings } = useEarningsCalendar(isLoaded ? symbols : []);
+  const { moveTags } = useExplainMove(tickers);
   const [selectedSymbol, setSelectedSymbol] = useState<string | null>(null);
   const [mobileTab, setMobileTab] = useState<MobileTab>('heatmap');
 
@@ -53,7 +55,7 @@ export default function Dashboard() {
 
       {/* ── Desktop layout: 2×2 grid ──────────────────────────────────── */}
       <main className="hidden md:grid grid-cols-2 grid-rows-2 flex-1 gap-2 p-2 overflow-hidden">
-        <Q1Heatmap tickers={tickers} earnings={earnings} loading={!isLoaded || marketLoading || (symbols.length > 0 && tickers.length === 0 && !marketError)} error={marketError} {...sharedProps} />
+        <Q1Heatmap tickers={tickers} earnings={earnings} moveTags={moveTags} loading={!isLoaded || marketLoading || (symbols.length > 0 && tickers.length === 0 && !marketError)} error={marketError} {...sharedProps} />
         <Q2NewsFeed news={news} symbols={symbols} loading={newsLoading} {...sharedProps} />
         <Q3AIChat getContext={getDashboardContext} selectedSymbol={selectedSymbol} tickers={tickers} />
         <Q4Sentiment selectedSymbol={selectedSymbol} symbols={symbols} />
@@ -63,7 +65,7 @@ export default function Dashboard() {
       <main className="flex flex-col flex-1 md:hidden overflow-hidden">
         <div className="flex-1 overflow-hidden">
           {mobileTab === 'heatmap' && (
-            <Q1Heatmap tickers={tickers} earnings={earnings} loading={!isLoaded || marketLoading || (symbols.length > 0 && tickers.length === 0 && !marketError)} error={marketError} {...sharedProps} />
+            <Q1Heatmap tickers={tickers} earnings={earnings} moveTags={moveTags} loading={!isLoaded || marketLoading || (symbols.length > 0 && tickers.length === 0 && !marketError)} error={marketError} {...sharedProps} />
           )}
           {mobileTab === 'news' && (
             <Q2NewsFeed news={news} symbols={symbols} loading={newsLoading} {...sharedProps} />
