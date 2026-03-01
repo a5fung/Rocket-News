@@ -21,7 +21,6 @@ import uuid
 from datetime import datetime, timezone
 
 import httpx
-from curl_cffi import requests as cffi_requests
 
 from app.core.config import settings
 
@@ -49,7 +48,7 @@ MIN_ENGAGEMENT = 3
 # Simple in-process cache — avoids hammering Reddit on every UI poll
 # Key: symbol, Value: (timestamp, posts_list)
 _posts_cache: dict[str, tuple[float, list]] = {}
-CACHE_TTL = 300  # seconds (5 minutes)
+CACHE_TTL = 900  # seconds (15 minutes)
 
 
 def _is_finance_post(data: dict, symbol: str) -> bool:
@@ -101,7 +100,9 @@ def _stocktwits_sync(symbol: str, limit: int) -> list[dict]:
     """
     Synchronous StockTwits fetch using curl_cffi (Chrome TLS impersonation).
     Run via run_in_executor to avoid event-loop conflicts with uvicorn's asyncio.
+    Import is lazy so curl_cffi doesn't slow down module-level startup.
     """
+    from curl_cffi import requests as cffi_requests  # lazy — avoids startup overhead
     try:
         resp = cffi_requests.get(
             f"{STOCKTWITS_BASE}/streams/symbol/{symbol}.json",

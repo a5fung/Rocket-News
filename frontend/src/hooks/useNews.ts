@@ -1,37 +1,56 @@
 'use client';
 
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { fetchNews, fetchTickerNews } from '@/lib/api';
+import { getCached, setCached } from '@/lib/cache';
 import type { NewsItem } from '@/types';
 
 export function useNews(symbols: string[], limit = 20) {
+  const symbolsKey = symbols.join(',');
   const [news, setNews] = useState<NewsItem[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-
-  const fetch_ = useCallback(async () => {
-    if (symbols.length === 0) {
-      setNews([]);
-      return;
-    }
-    setLoading(true);
-    const result = await fetchNews(symbols, limit);
-    setLoading(false);
-    if (result.error) {
-      setError(result.error.detail);
-    } else {
-      setNews(result.data);
-      setError(null);
-    }
-  }, [symbols, limit]);
+  const refetchRef = useRef<() => void>(() => {});
 
   useEffect(() => {
-    void fetch_();
-    const interval = setInterval(() => void fetch_(), 60_000); // refresh every 60s
-    return () => clearInterval(interval);
-  }, [fetch_]);
+    if (symbols.length === 0) {
+      setNews([]);
+      setLoading(false);
+      return;
+    }
 
-  return { news, loading, error, refetch: fetch_ };
+    // Show stale news immediately while fetching fresh
+    const cached = getCached<NewsItem[]>('news', symbols);
+    if (cached) setNews(cached.data);
+
+    let cancelled = false;
+
+    const doFetch = async () => {
+      if (!cached) setLoading(true);
+      const result = await fetchNews(symbols, limit);
+      if (cancelled) return;
+      setLoading(false);
+      if (result.error) {
+        setError(result.error.detail);
+      } else {
+        setNews(result.data);
+        setError(null);
+        setCached('news', symbols, result.data);
+      }
+    };
+
+    refetchRef.current = doFetch;
+    void doFetch();
+    const interval = setInterval(doFetch, 60_000); // refresh every 60s
+    return () => {
+      cancelled = true;
+      clearInterval(interval);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [symbolsKey, limit]);
+
+  const refetch = useCallback(() => void refetchRef.current(), []);
+  return { news, loading, error, refetch };
 }
 
 export function useTickerNews(symbol: string | null, limit = 10) {

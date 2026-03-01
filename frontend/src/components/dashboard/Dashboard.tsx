@@ -1,12 +1,14 @@
 'use client';
 
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { RefreshCw } from 'lucide-react';
 import { usePortfolio } from '@/hooks/usePortfolio';
 import { useWatchlist } from '@/hooks/useWatchlist';
 import { useEarningsCalendar, useMarketData, useSparklines } from '@/hooks/useMarketData';
 import { useExplainMove } from '@/hooks/useExplainMove';
 import { useNews } from '@/hooks/useNews';
 import { syncAlertWatchlist } from '@/lib/api';
+import { formatAge } from '@/lib/cache';
 import type { DashboardContext } from '@/types';
 
 import Q1Heatmap from './Q1Heatmap';
@@ -23,14 +25,16 @@ export type MobileTab = 'market' | 'research';
 
 export default function Dashboard() {
   const { symbols, isLoaded, add, remove } = useWatchlist();
-  const { tickers, loading: marketLoading, error: marketError } = useMarketData(isLoaded ? symbols : []);
-  const { news, loading: newsLoading } = useNews(isLoaded ? symbols : []);
+  const { tickers, loading: marketLoading, error: marketError, refetch: refetchTickers, lastUpdated } = useMarketData(isLoaded ? symbols : []);
+  const { news, loading: newsLoading, refetch: refetchNews } = useNews(isLoaded ? symbols : []);
   const { earnings } = useEarningsCalendar(isLoaded ? symbols : []);
   const { moveTags } = useExplainMove(tickers);
   const { sparklines } = useSparklines(isLoaded ? symbols : []);
   const { positions, setPosition, clearPosition } = usePortfolio();
   const [selectedSymbol, setSelectedSymbol] = useState<string | null>(null);
   const [mobileTab, setMobileTab] = useState<MobileTab>('market');
+  const [ageLabel, setAgeLabel] = useState<string>('');
+  const [refreshing, setRefreshing] = useState(false);
   const swipeStartX = useRef(0);
   const swipeStartY = useRef(0);
 
@@ -40,6 +44,20 @@ export default function Dashboard() {
       void syncAlertWatchlist(symbols);
     }
   }, [isLoaded, symbols]);
+
+  // Keep "Updated Xm ago" label ticking every 30s
+  useEffect(() => {
+    if (!lastUpdated) { setAgeLabel(''); return; }
+    setAgeLabel(formatAge(lastUpdated));
+    const id = setInterval(() => setAgeLabel(formatAge(lastUpdated)), 30_000);
+    return () => clearInterval(id);
+  }, [lastUpdated]);
+
+  const handleRefresh = useCallback(async () => {
+    setRefreshing(true);
+    await Promise.all([refetchTickers(), refetchNews()]);
+    setRefreshing(false);
+  }, [refetchTickers, refetchNews]);
 
   // Build dashboard context for AI injection
   const getDashboardContext = useMemo(
@@ -53,6 +71,7 @@ export default function Dashboard() {
   );
 
   const sharedProps = { selectedSymbol, onSelectTicker: setSelectedSymbol };
+  const heatmapLoading = !isLoaded || marketLoading || (symbols.length > 0 && tickers.length === 0 && !marketError);
 
   return (
     <div className="flex flex-col h-screen overflow-hidden">
@@ -64,8 +83,20 @@ export default function Dashboard() {
             Rocket <span className="text-accent">News</span>
           </span>
           <span className="text-gray-500 text-xs">· {symbols.length} stocks</span>
+          {ageLabel && (
+            <span className="hidden sm:inline text-gray-600 text-xs">· {ageLabel}</span>
+          )}
         </div>
         <div className="flex items-center gap-2">
+          {/* Refresh button */}
+          <button
+            onClick={() => void handleRefresh()}
+            disabled={refreshing}
+            title="Refresh data"
+            className="p-1.5 rounded text-gray-500 hover:text-gray-300 transition-colors disabled:opacity-40"
+          >
+            <RefreshCw size={14} className={refreshing ? 'animate-spin' : ''} />
+          </button>
           <AlertsButton symbols={symbols} />
           <PortfolioManager symbols={symbols} tickers={tickers} positions={positions} onSet={setPosition} onClear={clearPosition} />
           <WatchlistManager symbols={symbols} onAdd={add} onRemove={remove} />
@@ -74,7 +105,7 @@ export default function Dashboard() {
 
       {/* ── Desktop layout: 2×2 grid ──────────────────────────────────── */}
       <main className="hidden md:grid grid-cols-2 grid-rows-2 flex-1 gap-2 p-2 overflow-hidden">
-        <Q1Heatmap tickers={tickers} earnings={earnings} moveTags={moveTags} sparklines={sparklines} positions={positions} loading={!isLoaded || marketLoading || (symbols.length > 0 && tickers.length === 0 && !marketError)} error={marketError} {...sharedProps} />
+        <Q1Heatmap tickers={tickers} earnings={earnings} moveTags={moveTags} sparklines={sparklines} positions={positions} loading={heatmapLoading} error={marketError} {...sharedProps} />
         <Q2NewsFeed news={news} symbols={symbols} loading={newsLoading} {...sharedProps} />
         <Q3AIChat getContext={getDashboardContext} selectedSymbol={selectedSymbol} tickers={tickers} />
         <Q4Sentiment selectedSymbol={selectedSymbol} symbols={symbols} />
@@ -102,7 +133,7 @@ export default function Dashboard() {
           {mobileTab === 'market' && (
             <div className="flex flex-col h-full">
               <div className="h-[45%] min-h-0 border-b border-surface-border grid">
-                <Q1Heatmap tickers={tickers} earnings={earnings} moveTags={moveTags} sparklines={sparklines} positions={positions} loading={!isLoaded || marketLoading || (symbols.length > 0 && tickers.length === 0 && !marketError)} error={marketError} {...sharedProps} />
+                <Q1Heatmap tickers={tickers} earnings={earnings} moveTags={moveTags} sparklines={sparklines} positions={positions} loading={heatmapLoading} error={marketError} {...sharedProps} />
               </div>
               <div className="flex-1 min-h-0 grid">
                 <Q4Sentiment selectedSymbol={selectedSymbol} symbols={symbols} />

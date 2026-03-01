@@ -26,7 +26,7 @@ from app.services import airlock
 # In-process cache — avoids hammering 5 external APIs on every 60-s frontend poll
 # Key: symbol, Value: (monotonic_timestamp, items_list)
 _news_cache: dict[str, tuple[float, list[NewsItem]]] = {}
-NEWS_CACHE_TTL = 300  # seconds (5 minutes)
+NEWS_CACHE_TTL = 600  # seconds (10 minutes)
 
 FINNHUB_BASE = "https://finnhub.io/api/v1"
 

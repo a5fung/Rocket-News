@@ -15,6 +15,12 @@ from app.models.schemas import CandlePoint, EarningsEvent, Ticker
 
 FINNHUB_BASE = "https://finnhub.io/api/v1"
 
+# Shared client — reuses TCP connections across all Finnhub API calls
+_http = httpx.AsyncClient(
+    limits=httpx.Limits(max_connections=30, max_keepalive_connections=10),
+    timeout=httpx.Timeout(10.0),
+)
+
 # Company names/logos rarely change — cache profiles for process lifetime
 _profile_cache: dict[str, tuple[str, str]] = {}  # symbol → (name, logo_url)
 
@@ -29,45 +35,43 @@ _CANDLES_TTL = 300.0
 
 async def get_quote(symbol: str) -> Ticker | None:
     """Fetch a single real-time quote from Finnhub."""
-    async with httpx.AsyncClient() as client:
-        resp = await client.get(
-            f"{FINNHUB_BASE}/quote",
-            params={"symbol": symbol, "token": settings.finnhub_api_key},
-            timeout=10,
-        )
-        if resp.status_code != 200:
-            return None
+    resp = await _http.get(
+        f"{FINNHUB_BASE}/quote",
+        params={"symbol": symbol, "token": settings.finnhub_api_key},
+    )
+    if resp.status_code != 200:
+        return None
 
-        data = resp.json()
+    data = resp.json()
 
-        # Finnhub returns null for d/dp outside market hours or for unknown tickers.
-        # .get("d", 0) won't help when the key exists but the value is null — use `or 0`.
-        price = data.get("c") or 0.0
-        prev_close = data.get("pc") or price
-        change = data.get("d") or 0.0
-        change_pct = data.get("dp") or 0.0
+    # Finnhub returns null for d/dp outside market hours or for unknown tickers.
+    # .get("d", 0) won't help when the key exists but the value is null — use `or 0`.
+    price = data.get("c") or 0.0
+    prev_close = data.get("pc") or price
+    change = data.get("d") or 0.0
+    change_pct = data.get("dp") or 0.0
 
-        # Skip tickers Finnhub doesn't recognise (price stays 0)
-        if price == 0:
-            return None
+    # Skip tickers Finnhub doesn't recognise (price stays 0)
+    if price == 0:
+        return None
 
-        cached = _profile_cache.get(symbol)
-        if cached is None:
-            profile = await _get_profile(client, symbol)
-            name = profile.get("name", symbol) or symbol
-            logo_url = profile.get("logo") or ""
-            _profile_cache[symbol] = (name, logo_url)
-        else:
-            name, logo_url = cached
+    cached = _profile_cache.get(symbol)
+    if cached is None:
+        profile = await _get_profile(symbol)
+        name = profile.get("name", symbol) or symbol
+        logo_url = profile.get("logo") or ""
+        _profile_cache[symbol] = (name, logo_url)
+    else:
+        name, logo_url = cached
 
-        return Ticker(
-            symbol=symbol,
-            name=name,
-            price=float(price),
-            change=float(change),
-            change_percent=float(change_pct),
-            logo_url=logo_url or None,
-        )
+    return Ticker(
+        symbol=symbol,
+        name=name,
+        price=float(price),
+        change=float(change),
+        change_percent=float(change_pct),
+        logo_url=logo_url or None,
+    )
 
 
 async def get_quotes(symbols: list[str]) -> list[Ticker]:
@@ -77,9 +81,9 @@ async def get_quotes(symbols: list[str]) -> list[Ticker]:
     return [r for r in results if r is not None]
 
 
-async def _get_profile(client: httpx.AsyncClient, symbol: str) -> dict:
+async def _get_profile(symbol: str) -> dict:
     try:
-        resp = await client.get(
+        resp = await _http.get(
             f"{FINNHUB_BASE}/stock/profile2",
             params={"symbol": symbol, "token": settings.finnhub_api_key},
             timeout=5,
@@ -105,17 +109,15 @@ async def _get_earnings_for_symbol(symbol: str) -> EarningsEvent | None:
     to_date = today + timedelta(days=7)
 
     try:
-        async with httpx.AsyncClient() as client:
-            resp = await client.get(
-                f"{FINNHUB_BASE}/calendar/earnings",
-                params={
-                    "from": today.isoformat(),
-                    "to": to_date.isoformat(),
-                    "symbol": symbol,
-                    "token": settings.finnhub_api_key,
-                },
-                timeout=8,
-            )
+        resp = await _http.get(
+            f"{FINNHUB_BASE}/calendar/earnings",
+            params={
+                "from": today.isoformat(),
+                "to": to_date.isoformat(),
+                "symbol": symbol,
+                "token": settings.finnhub_api_key,
+            },
+        )
         if resp.status_code != 200:
             _earnings_cache[symbol] = (now, None)
             return None
@@ -164,18 +166,16 @@ async def _get_candles_for_symbol(symbol: str) -> list[CandlePoint]:
     from_ts = now_ts - 8 * 3600  # last 8 hours always covers the full US trading session
 
     try:
-        async with httpx.AsyncClient() as client:
-            resp = await client.get(
-                f"{FINNHUB_BASE}/stock/candle",
-                params={
-                    "symbol": symbol,
-                    "resolution": "5",
-                    "from": from_ts,
-                    "to": now_ts,
-                    "token": settings.finnhub_api_key,
-                },
-                timeout=8,
-            )
+        resp = await _http.get(
+            f"{FINNHUB_BASE}/stock/candle",
+            params={
+                "symbol": symbol,
+                "resolution": "5",
+                "from": from_ts,
+                "to": now_ts,
+                "token": settings.finnhub_api_key,
+            },
+        )
         if resp.status_code != 200:
             _candles_cache[symbol] = (now_mono, [])
             return []
