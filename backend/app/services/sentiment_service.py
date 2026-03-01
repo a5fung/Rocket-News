@@ -14,14 +14,18 @@ Reddit:
 """
 
 import asyncio
+import logging
 import re
 import time
 import uuid
 from datetime import datetime, timezone
 
 import httpx
+from curl_cffi.requests import AsyncSession as CurlSession
 
 from app.core.config import settings
+
+logger = logging.getLogger(__name__)
 from app.models.schemas import SentimentDataPoint, SentimentPost, SentimentScore
 from app.services import airlock
 
@@ -96,17 +100,22 @@ def _stocktwits_sentiment(msg: dict) -> float:
 async def _fetch_stocktwits(symbol: str, limit: int = 30) -> list[SentimentPost]:
     """
     Fetch recent StockTwits messages for a symbol.
+    Uses curl_cffi to impersonate Chrome at the TLS layer, bypassing Cloudflare
+    Bot Management which blocks standard Python HTTP clients with a 403.
     Native bull/bear tags are used directly — no airlock needed.
     """
-    async with httpx.AsyncClient() as client:
+    async with CurlSession(impersonate="chrome110") as session:
         try:
-            resp = await client.get(
+            resp = await session.get(
                 f"{STOCKTWITS_BASE}/streams/symbol/{symbol}.json",
                 params={"limit": min(limit, 30)},
                 timeout=8,
-                headers={"User-Agent": "RocketNews/0.1"},
             )
+            if resp.status_code == 403:
+                logger.warning("StockTwits 403 for %s — Cloudflare block not bypassed", symbol)
+                return []
             if resp.status_code != 200:
+                logger.debug("StockTwits %s for %s", resp.status_code, symbol)
                 return []
 
             messages = resp.json().get("messages", [])
@@ -141,7 +150,8 @@ async def _fetch_stocktwits(symbol: str, limit: int = 30) -> list[SentimentPost]
                 ))
 
             return posts
-        except Exception:
+        except Exception as exc:
+            logger.warning("StockTwits fetch failed for %s: %s", symbol, exc)
             return []
 
 
