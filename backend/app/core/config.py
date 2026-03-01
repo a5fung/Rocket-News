@@ -10,6 +10,11 @@ class Settings(BaseSettings):
     x_bearer_token: str = ""
     anthropic_api_key: str = ""
     cors_origins: str = "http://localhost:3000"
+    # Alpaca paper-trading account — gives free Benzinga news feed
+    alpaca_api_key: str = ""
+    alpaca_api_secret: str = ""
+    # Financial Modeling Prep — free tier (250 req/day), good SEC filing coverage
+    fmp_api_key: str = ""
 
     @property
     def cors_origins_list(self) -> list[str]:

@@ -230,7 +230,7 @@ async def get_posts(symbol: str, limit: int = 20) -> list[SentimentPost]:
 
 
 async def get_sentiment(symbol: str) -> SentimentScore:
-    """Compute aggregate sentiment score for a symbol."""
+    """Compute aggregate sentiment score for a symbol, including LLM-extracted themes."""
     posts = await get_posts(symbol, limit=40)
 
     if not posts:
@@ -241,6 +241,7 @@ async def get_sentiment(symbol: str) -> SentimentScore:
             trend="neutral",
             post_volume=0,
             window_hours=24,
+            themes=[],
         )
 
     scores = [p.sentiment_score for p in posts]
@@ -257,6 +258,10 @@ async def get_sentiment(symbol: str) -> SentimentScore:
         else "neutral"
     )
 
+    # Extract trending themes from top posts via Claude Haiku (skipped if no API key)
+    top_texts = [p.content for p in sorted(posts, key=lambda p: p.engagement, reverse=True)[:15]]
+    themes = await airlock.extract_themes(symbol, top_texts)
+
     return SentimentScore(
         score=round(avg, 3),
         bullish_pct=round(bullish, 1),
@@ -264,6 +269,7 @@ async def get_sentiment(symbol: str) -> SentimentScore:
         trend=trend,
         post_volume=len(posts),
         window_hours=24,
+        themes=themes,
     )
 
 

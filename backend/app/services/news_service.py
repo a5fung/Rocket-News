@@ -50,6 +50,9 @@ def _parse_datetime(value) -> str:
     return datetime.now(timezone.utc).isoformat()
 
 
+ALPACA_NEWS_URL = "https://data.alpaca.markets/v1beta1/news"
+FMP_NEWS_URL    = "https://financialmodelingprep.com/api/v3/stock_news"
+
 # ── Individual source fetchers ─────────────────────────────────────────────────
 
 async def _fetch_finnhub(symbol: str, from_date: str, to_date: str) -> list[dict]:
@@ -125,6 +128,75 @@ async def _fetch_yahoo_rss(symbol: str, days: int = 3) -> list[dict]:
                 })
 
             return items[:15]
+        except Exception:
+            return []
+
+
+async def _fetch_alpaca(symbol: str) -> list[dict]:
+    """
+    Alpaca paper-trading API — gives access to Benzinga's catalyst-driven feed
+    for free with a paper trading account (alpaca.markets).
+    Covers analyst upgrades, earnings beats, contract awards for mid/small caps.
+    """
+    if not settings.alpaca_api_key or not settings.alpaca_api_secret:
+        return []
+    async with httpx.AsyncClient() as client:
+        try:
+            resp = await client.get(
+                ALPACA_NEWS_URL,
+                params={"symbols": symbol, "limit": 15, "sort": "desc"},
+                headers={
+                    "APCA-API-KEY-ID": settings.alpaca_api_key,
+                    "APCA-API-SECRET-KEY": settings.alpaca_api_secret,
+                },
+                timeout=8,
+            )
+            if resp.status_code != 200:
+                return []
+            return [
+                {
+                    "id": str(item.get("id", uuid.uuid4())),
+                    "headline": item.get("headline", ""),
+                    "summary": item.get("summary", ""),
+                    "source": item.get("source", "Benzinga"),
+                    "url": item.get("url", ""),
+                    "published_at": item.get("created_at", ""),
+                }
+                for item in resp.json().get("news", [])
+            ]
+        except Exception:
+            return []
+
+
+async def _fetch_fmp(symbol: str) -> list[dict]:
+    """
+    Financial Modeling Prep — free tier (250 req/day with a free account key).
+    Good SEC filing and earnings coverage for small/mid caps.
+    Register at: https://financialmodelingprep.com/developer/docs
+    """
+    if not settings.fmp_api_key:
+        return []
+    async with httpx.AsyncClient() as client:
+        try:
+            resp = await client.get(
+                FMP_NEWS_URL,
+                params={"tickers": symbol, "limit": 10, "apikey": settings.fmp_api_key},
+                timeout=8,
+            )
+            if resp.status_code != 200:
+                return []
+            return [
+                {
+                    "id": str(uuid.uuid4()),
+                    "headline": item.get("title", ""),
+                    "summary": item.get("text", "")[:300],
+                    "source": item.get("site", "FMP"),
+                    "url": item.get("url", ""),
+                    "published_at": item.get("publishedDate", ""),
+                }
+                for item in resp.json()
+                if isinstance(item, dict)
+            ]
         except Exception:
             return []
 
@@ -207,14 +279,17 @@ async def get_news_for_ticker(symbol: str, days: int = 3, limit: int = 10) -> li
     to_date = datetime.now(timezone.utc).strftime("%Y-%m-%d")
 
     # Fetch all sources concurrently
-    finnhub_raw, yahoo_raw, edgar_items = await asyncio.gather(
+    finnhub_raw, yahoo_raw, alpaca_raw, fmp_raw, edgar_items = await asyncio.gather(
         _fetch_finnhub(symbol, from_date, to_date),
         _fetch_yahoo_rss(symbol, days=days),
+        _fetch_alpaca(symbol),
+        _fetch_fmp(symbol),
         _fetch_sec_edgar(symbol, from_date),
     )
 
     # Merge text sources; deduplicate by headline prefix before airlock
-    combined = finnhub_raw + yahoo_raw
+    # Alpaca (Benzinga) first — highest catalyst signal for small caps
+    combined = alpaca_raw + finnhub_raw + fmp_raw + yahoo_raw
     seen: set[str] = set()
     deduped: list[dict] = []
     for item in combined:

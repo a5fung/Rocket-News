@@ -90,3 +90,45 @@ async def score_batch(ticker: str, texts: list[str]) -> list[AirlockResult]:
     """Score multiple texts concurrently."""
     import asyncio
     return await asyncio.gather(*[score(ticker, t) for t in texts])
+
+
+_THEMES_PROMPT = """\
+You are a financial analyst reading social media posts about a stock.
+Extract 2-3 specific trending themes or catalysts driving the discussion.
+
+Rules:
+- Return ONLY a JSON array of short hashtag-style strings
+- Be specific and actionable (e.g. "#GuidanceRaise", "#ShortSqueeze", "#CEOInterview")
+- Avoid generic terms like "#Bullish", "#Bearish", "#Stock", "#Market"
+- If there are no clear themes, return []
+
+Example output: ["#EarningsBeat", "#AnalystUpgrade"]
+"""
+
+
+async def extract_themes(ticker: str, post_texts: list[str]) -> list[str]:
+    """
+    Use Claude Haiku to extract 2-3 trending catalyst themes from social posts.
+    Returns [] when no API key is configured.
+    """
+    if not settings.anthropic_api_key or not post_texts:
+        return []
+
+    client = _get_client()
+    combined = "\n---\n".join(t[:200] for t in post_texts[:12])
+    user_msg = f"Ticker: ${ticker}\n\nPosts:\n{combined[:2500]}"
+
+    try:
+        response = await client.messages.create(
+            model="claude-haiku-4-5-20251001",
+            max_tokens=80,
+            system=_THEMES_PROMPT,
+            messages=[{"role": "user", "content": user_msg}],
+        )
+        raw = response.content[0].text.strip()
+        themes = json.loads(raw)
+        if isinstance(themes, list):
+            return [str(t) for t in themes[:3] if isinstance(t, str)]
+        return []
+    except Exception:
+        return []

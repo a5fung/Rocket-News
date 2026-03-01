@@ -51,6 +51,7 @@ export interface SentimentScore {
   trend: SentimentTrend;
   postVolume: number;     // number of posts scored in window
   windowHours: number;   // e.g. 24
+  themes: string[];       // LLM-extracted trending catalysts e.g. ["#EarningsBeat"]
 }
 
 export interface SentimentDataPoint {

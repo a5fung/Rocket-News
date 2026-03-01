@@ -69,6 +69,7 @@ class SentimentScore(_CamelModel):
     trend: Literal["rising", "falling", "neutral"]
     post_volume: int
     window_hours: int
+    themes: list[str] = []  # LLM-extracted trending catalysts e.g. ["#EarningsBeat"]
 
 
 class SentimentDataPoint(_CamelModel):
