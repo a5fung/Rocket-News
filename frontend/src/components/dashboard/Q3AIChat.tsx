@@ -1,6 +1,6 @@
 'use client';
 
-import { Send, Trash2, Key } from 'lucide-react';
+import { BarChart2, Calendar, Key, Send, Trash2, TrendingUp } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useChat } from '@/hooks/useChat';
 import { getApiKey, setApiKey } from '@/lib/storage';
@@ -11,6 +11,70 @@ interface Props {
   selectedSymbol: string | null;
   tickers: Ticker[];
 }
+
+// ─── Execution prompts ────────────────────────────────────────────────────────
+// Each fires a detailed expert-framed message using live dashboard context.
+
+interface ExecPrompt {
+  id: string;
+  label: string;
+  icon: React.ReactNode;
+  buildMessage: (symbol: string | null, tickers: Ticker[]) => string;
+}
+
+const EXECUTION_PROMPTS: ExecPrompt[] = [
+  {
+    id: 'catalysts',
+    label: 'Extract Catalysts',
+    icon: <Calendar size={11} />,
+    buildMessage: (symbol, tickers) => {
+      const focus = symbol
+        ?? [...tickers].sort((a, b) => Math.abs(b.changePercent) - Math.abs(a.changePercent))[0]?.symbol
+        ?? 'my watchlist';
+      return (
+        `Acting as a professional equity research analyst: review the news and data for ${focus} ` +
+        `in the dashboard context. Extract ALL upcoming binary catalyst events into a bulleted ` +
+        `timeline sorted by date. For each event include: (1) event type, (2) expected timing, ` +
+        `(3) potential impact direction. Focus only on actionable near-term events.`
+      );
+    },
+  },
+  {
+    id: 'thesis',
+    label: 'Trade Thesis',
+    icon: <TrendingUp size={11} />,
+    buildMessage: (symbol, tickers) => {
+      const sorted = [...tickers].sort((a, b) => Math.abs(b.changePercent) - Math.abs(a.changePercent));
+      const focus = symbol ?? sorted[0]?.symbol ?? 'the top mover';
+      const t = tickers.find((x) => x.symbol === focus);
+      const move = t ? ` (${t.changePercent >= 0 ? '+' : ''}${t.changePercent.toFixed(2)}% today)` : '';
+      return (
+        `Acting as a professional trader: for ${focus}${move}, construct a concise trade thesis ` +
+        `using the price action, news catalysts, and sentiment score in the dashboard. ` +
+        `Structure your response exactly as — VERDICT: [Buy/Hold/Sell] · BULL CASE: [1-2 sentences] ` +
+        `· BEAR CASE: [1-2 sentences] · BIGGEST RISK: [1 sentence]. Be direct and actionable.`
+      );
+    },
+  },
+  {
+    id: 'divergence',
+    label: 'Find Divergence',
+    icon: <BarChart2 size={11} />,
+    buildMessage: (symbol, tickers) => {
+      const focus = symbol
+        ?? [...tickers].sort((a, b) => Math.abs(b.changePercent) - Math.abs(a.changePercent))[0]?.symbol
+        ?? 'the top mover';
+      return (
+        `Acting as a quant analyst: for ${focus}, compare the recent price trend against the ` +
+        `sentiment trend using the dashboard data. Identify any divergence — is price rising while ` +
+        `sentiment is falling (distribution), or sentiment rising while price falls (accumulation)? ` +
+        `What does this signal about retail vs smart money positioning? Be specific with the numbers.`
+      );
+    },
+  },
+];
+
+// ─── Suggestion questions ─────────────────────────────────────────────────────
 
 function buildSuggestions(tickers: Ticker[], selectedSymbol: string | null): string[] {
   if (tickers.length === 0) {
@@ -50,6 +114,8 @@ function buildSuggestions(tickers: Ticker[], selectedSymbol: string | null): str
   return suggestions.slice(0, 5);
 }
 
+// ─── API key setup screen ─────────────────────────────────────────────────────
+
 function ApiKeySetup({ onSave }: { onSave: (key: string) => void }) {
   const [value, setValue] = useState('');
   return (
@@ -81,6 +147,8 @@ function ApiKeySetup({ onSave }: { onSave: (key: string) => void }) {
     </div>
   );
 }
+
+// ─── Main component ───────────────────────────────────────────────────────────
 
 export default function Q3AIChat({ getContext, selectedSymbol, tickers }: Props) {
   const [apiKey, setKey] = useState('');
@@ -148,18 +216,48 @@ export default function Q3AIChat({ getContext, selectedSymbol, tickers }: Props)
       {/* Messages */}
       <div className="flex-1 overflow-y-auto p-3 flex flex-col gap-3">
         {messages.length === 0 && (
-          <div className="flex flex-col gap-2 mt-2">
-            <p className="text-xs text-gray-500 text-center">Suggested questions</p>
-            {suggestions.map((q) => (
-              <button
-                key={q}
-                onClick={() => send(q)}
-                className="text-left text-xs px-3 py-2 rounded-md border border-surface-border
-                  text-gray-400 hover:text-gray-200 hover:border-gray-500 transition-colors"
-              >
-                {q}
-              </button>
-            ))}
+          <div className="flex flex-col gap-4 mt-1">
+
+            {/* ── Execution prompts ── */}
+            <div className="flex flex-col gap-1.5">
+              <p className="text-[10px] text-gray-500 text-center uppercase tracking-wider">
+                Quick Actions
+              </p>
+              <div className="grid grid-cols-3 gap-1.5">
+                {EXECUTION_PROMPTS.map((p) => (
+                  <button
+                    key={p.id}
+                    onClick={() => send(p.buildMessage(selectedSymbol, tickers))}
+                    disabled={loading}
+                    className="flex flex-col items-center gap-1.5 px-2 py-2.5 rounded-md
+                      border border-accent/30 text-accent text-[10px] font-medium
+                      hover:bg-accent/10 hover:border-accent/60 transition-colors
+                      disabled:opacity-40"
+                  >
+                    {p.icon}
+                    {p.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* ── Suggestion questions ── */}
+            <div className="flex flex-col gap-1.5">
+              <p className="text-[10px] text-gray-500 text-center uppercase tracking-wider">
+                Ask About Your Stocks
+              </p>
+              {suggestions.map((q) => (
+                <button
+                  key={q}
+                  onClick={() => send(q)}
+                  className="text-left text-xs px-3 py-2 rounded-md border border-surface-border
+                    text-gray-400 hover:text-gray-200 hover:border-gray-500 transition-colors"
+                >
+                  {q}
+                </button>
+              ))}
+            </div>
+
           </div>
         )}
 
@@ -202,10 +300,31 @@ export default function Q3AIChat({ getContext, selectedSymbol, tickers }: Props)
         <div ref={bottomRef} />
       </div>
 
-      {/* Bottom bar: chips (when chat active) + input */}
+      {/* Bottom bar: always-visible chips + input */}
       <div className="shrink-0 border-t border-surface-border">
         {messages.length > 0 && (
-          <div className="px-2 pt-1.5 pb-0 flex gap-1.5 overflow-x-auto scrollbar-none">
+          <div className="px-2 pt-1.5 pb-0 flex gap-1.5 overflow-x-auto scrollbar-none items-center">
+
+            {/* Execution prompts — accent styled, icon + label */}
+            {EXECUTION_PROMPTS.map((p) => (
+              <button
+                key={p.id}
+                onClick={() => send(p.buildMessage(selectedSymbol, tickers))}
+                disabled={loading}
+                className="shrink-0 flex items-center gap-1 text-[10px] font-medium px-2 py-1
+                  rounded-full border border-accent/40 text-accent
+                  hover:bg-accent/10 hover:border-accent/70 transition-colors
+                  whitespace-nowrap disabled:opacity-40"
+              >
+                {p.icon}
+                {p.label}
+              </button>
+            ))}
+
+            {/* Divider */}
+            <span className="shrink-0 w-px h-3 bg-surface-border" />
+
+            {/* Suggestion chips */}
             {suggestions.map((q) => (
               <button
                 key={q}
@@ -220,6 +339,7 @@ export default function Q3AIChat({ getContext, selectedSymbol, tickers }: Props)
             ))}
           </div>
         )}
+
         <div className="p-2 flex gap-2">
           <input
             type="text"
