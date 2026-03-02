@@ -9,7 +9,7 @@ import { useExplainMove } from '@/hooks/useExplainMove';
 import { useNews } from '@/hooks/useNews';
 import { syncAlertWatchlist } from '@/lib/api';
 import { formatAge } from '@/lib/cache';
-import type { DashboardContext } from '@/types';
+import type { DashboardContext, SentimentScore } from '@/types';
 
 import Q1Heatmap from './Q1Heatmap';
 import Q2NewsFeed from './Q2NewsFeed';
@@ -31,6 +31,7 @@ export default function Dashboard() {
   const { moveTags } = useExplainMove(tickers);
   const { sparklines } = useSparklines(isLoaded ? symbols : []);
   const { positions, setPosition, clearPosition } = usePortfolio();
+  const [sentimentMap, setSentimentMap] = useState<Record<string, SentimentScore>>({});
   const [selectedSymbol, setSelectedSymbol] = useState<string | null>(null);
   const [mobileTab, setMobileTab] = useState<MobileTab>('market');
   const [ageLabel, setAgeLabel] = useState<string>('');
@@ -59,15 +60,24 @@ export default function Dashboard() {
     setRefreshing(false);
   }, [refetchTickers, refetchNews]);
 
+  const handleSentimentLoad = useCallback(
+    (symbol: string, score: SentimentScore) =>
+      setSentimentMap((prev) => ({ ...prev, [symbol]: score })),
+    [],
+  );
+
   // Build dashboard context for AI injection
   const getDashboardContext = useMemo(
     () => (): DashboardContext => ({
       watchlist: tickers,
       topNews: news.slice(0, 15),
-      sentiment: {},
+      sentiment: sentimentMap,
+      earnings,
+      portfolio: positions,
+      moveTags,
       generatedAt: new Date().toISOString(),
     }),
-    [tickers, news],
+    [tickers, news, sentimentMap, earnings, positions, moveTags],
   );
 
   const sharedProps = { selectedSymbol, onSelectTicker: setSelectedSymbol };
@@ -108,7 +118,7 @@ export default function Dashboard() {
         <Q1Heatmap tickers={tickers} earnings={earnings} moveTags={moveTags} sparklines={sparklines} positions={positions} loading={heatmapLoading} error={marketError} {...sharedProps} />
         <Q2NewsFeed news={news} symbols={symbols} loading={newsLoading} {...sharedProps} />
         <Q3AIChat getContext={getDashboardContext} selectedSymbol={selectedSymbol} tickers={tickers} />
-        <Q4Sentiment selectedSymbol={selectedSymbol} symbols={symbols} onSelectTicker={setSelectedSymbol} />
+        <Q4Sentiment selectedSymbol={selectedSymbol} symbols={symbols} onSelectTicker={setSelectedSymbol} onSentimentLoad={handleSentimentLoad} />
       </main>
 
       {/* ── Mobile layout: 2-tab split-pane ────────────────────────────── */}
@@ -136,7 +146,7 @@ export default function Dashboard() {
                 <Q1Heatmap tickers={tickers} earnings={earnings} moveTags={moveTags} sparklines={sparklines} positions={positions} loading={heatmapLoading} error={marketError} {...sharedProps} />
               </div>
               <div className="flex-1 min-h-0 grid">
-                <Q4Sentiment selectedSymbol={selectedSymbol} symbols={symbols} onSelectTicker={setSelectedSymbol} />
+                <Q4Sentiment selectedSymbol={selectedSymbol} symbols={symbols} onSelectTicker={setSelectedSymbol} onSentimentLoad={handleSentimentLoad} />
               </div>
             </div>
           )}

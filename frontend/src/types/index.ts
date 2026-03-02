@@ -116,6 +116,9 @@ export interface DashboardContext {
   watchlist: Ticker[];
   topNews: NewsItem[];          // top 3 per ticker
   sentiment: Record<string, SentimentScore>; // keyed by symbol
+  earnings: EarningsEvent[];                 // upcoming events within 7 days
+  portfolio: Record<string, PortfolioPosition>; // keyed by symbol
+  moveTags: MoveTag[];                       // LLM attribution for ±3% movers
   generatedAt: string;          // ISO 8601
 }
 

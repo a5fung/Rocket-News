@@ -82,11 +82,54 @@ function buildSystemPrompt(context: DashboardContext): string {
   const news = newsLines.length ? newsLines.join('\n') : '  (no news available)';
 
   const sentimentLines = Object.entries(context.sentiment).map(
-    ([sym, score]) =>
-      `  $${sym}: ${score.bullishPct.toFixed(0)}% bull / ${score.bearishPct.toFixed(0)}% bear ` +
-      `(trend: ${score.trend}, n=${score.postVolume})`,
+    ([sym, score]) => {
+      const base =
+        `  $${sym}: ${score.bullishPct.toFixed(0)}% bull / ${score.bearishPct.toFixed(0)}% bear ` +
+        `(trend: ${score.trend}, n=${score.postVolume})`;
+      const extras: string[] = [];
+      if (score.themes?.length) extras.push(`themes: ${score.themes.join(' ')}`);
+      if (score.newsSentiment != null) extras.push(`newsSentiment: ${score.newsSentiment.toFixed(2)}`);
+      if (score.whisper) extras.push(`whisper: "${score.whisper}"`);
+      return extras.length ? `${base} — ${extras.join(', ')}` : base;
+    },
   );
   const sentiment = sentimentLines.length ? sentimentLines.join('\n') : '  (no sentiment data)';
+
+  // Earnings calendar section
+  const earningsLines = (context.earnings ?? []).map((e) => {
+    const timing = e.hour === 'amc' ? 'after-hours' : e.hour === 'bmo' ? 'before-market' : '';
+    const eps = e.epsEstimate != null ? ` · est. EPS $${e.epsEstimate.toFixed(2)}` : '';
+    return `  ${e.symbol} — ${e.fiscalQuarter} · ${e.reportDate}${timing ? ` (${timing})` : ''}${eps}`;
+  });
+  const earningsSection = earningsLines.length
+    ? ['', 'UPCOMING EARNINGS:', ...earningsLines]
+    : [];
+
+  // Portfolio positions section
+  const portfolioEntries = Object.entries(context.portfolio ?? {});
+  const portfolioLines = portfolioEntries.flatMap(([sym, pos]) => {
+    const ticker = context.watchlist.find((t) => t.symbol === sym);
+    if (!ticker) return [];
+    const currentValue = ticker.price * pos.shares;
+    const costValue = pos.costBasis * pos.shares;
+    const pnl = currentValue - costValue;
+    const pnlPct = costValue > 0 ? (pnl / costValue) * 100 : 0;
+    return [
+      `  ${sym} — ${pos.shares} shares @ $${pos.costBasis.toFixed(2)} cost · ` +
+      `current $${ticker.price.toFixed(2)} · P&L: ${pnl >= 0 ? '+' : ''}$${pnl.toFixed(0)} (${pnlPct >= 0 ? '+' : ''}${pnlPct.toFixed(1)}%)`,
+    ];
+  });
+  const portfolioSection = portfolioLines.length
+    ? ['', 'PORTFOLIO POSITIONS:', ...portfolioLines]
+    : [];
+
+  // Move attribution section
+  const moveLines = (context.moveTags ?? []).map((m) =>
+    `  ${m.symbol} ${m.changePercent >= 0 ? '+' : ''}${m.changePercent.toFixed(1)}% — ${m.tag}`,
+  );
+  const moveSection = moveLines.length
+    ? ['', "TODAY'S MOVE ATTRIBUTION:", ...moveLines]
+    : [];
 
   return [
     'You are a professional trading assistant embedded in a live stock dashboard called Rocket News.',
@@ -104,6 +147,9 @@ function buildSystemPrompt(context: DashboardContext): string {
     '',
     'SENTIMENT SCORES:',
     sentiment,
+    ...earningsSection,
+    ...portfolioSection,
+    ...moveSection,
     '────────────────────────────────────────────────────────────────────────────────',
     '',
     'Rules:',

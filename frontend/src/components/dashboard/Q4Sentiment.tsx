@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo } from 'react';
+import { useEffect, useMemo } from 'react';
 import {
   Area,
   Bar,
@@ -13,12 +13,13 @@ import {
   YAxis,
 } from 'recharts';
 import { useSentiment } from '@/hooks/useSentiment';
-import type { CandlePoint, SentimentDataPoint, SentimentSource } from '@/types';
+import type { CandlePoint, SentimentDataPoint, SentimentScore, SentimentSource } from '@/types';
 
 interface Props {
   selectedSymbol: string | null;
   symbols: string[];
   onSelectTicker: (symbol: string) => void;
+  onSentimentLoad?: (symbol: string, score: SentimentScore) => void;
 }
 
 // ── Helpers ────────────────────────────────────────────────────────────────────
@@ -336,10 +337,14 @@ function PostSkeleton() {
 
 // ── Main component ─────────────────────────────────────────────────────────────
 
-export default function Q4Sentiment({ selectedSymbol, symbols, onSelectTicker }: Props) {
+export default function Q4Sentiment({ selectedSymbol, symbols, onSelectTicker, onSentimentLoad }: Props) {
   const symbol = selectedSymbol ?? symbols[0] ?? null;
   const { score, history, posts, priceHistory, loading } = useSentiment(symbol);
   const symbolSet = useMemo(() => new Set(symbols), [symbols]);
+
+  useEffect(() => {
+    if (score && symbol) onSentimentLoad?.(symbol, score);
+  }, [score, symbol, onSentimentLoad]);
 
   const trendColor =
     score?.trend === 'rising'  ? 'text-bull' :
