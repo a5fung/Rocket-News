@@ -12,6 +12,7 @@ import type {
   SentimentScore,
   Ticker,
 } from '@/types';
+import { geminiChat } from './gemini';
 import { getApiKey } from './storage';
 
 const BASE = '/api'; // proxied to FastAPI via next.config.ts
@@ -129,13 +130,22 @@ export async function sendTestAlert(): Promise<ApiResult<{ ok: boolean; error: s
 
 // ─── AI Chat ──────────────────────────────────────────────────────────────────
 
+/**
+ * Calls Gemini directly from the browser — bypasses the Next.js / Vercel proxy
+ * so there is no 10-second serverless timeout on long inference calls.
+ */
 export async function sendChatMessage(
   messages: ChatMessage[],
   context: DashboardContext,
 ): Promise<ApiResult<{ reply: string; citedHeadlines?: string[] }>> {
   const apiKey = getApiKey();
-  return request(`/chat/`, {
-    method: 'POST',
-    body: JSON.stringify({ messages, context, apiKey }),
-  });
+  try {
+    const data = await geminiChat(messages, context, apiKey);
+    return { data, error: null };
+  } catch (err) {
+    return {
+      data: null,
+      error: { detail: err instanceof Error ? err.message : 'Network error', status: 0 },
+    };
+  }
 }
