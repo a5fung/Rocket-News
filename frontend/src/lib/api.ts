@@ -134,7 +134,7 @@ export async function sendChatMessage(
   context: DashboardContext,
 ): Promise<ApiResult<{ reply: string; citedHeadlines?: string[] }>> {
   const apiKey = getApiKey();
-  return request(`/chat`, {
+  return request(`/chat/`, {
     method: 'POST',
     body: JSON.stringify({ messages, context, apiKey }),
   });
