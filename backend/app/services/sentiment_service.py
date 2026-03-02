@@ -278,7 +278,18 @@ async def get_posts(symbol: str, limit: int = 20) -> list[SentimentPost]:
 
 
 async def get_sentiment(symbol: str) -> SentimentScore:
-    """Compute aggregate sentiment score for a symbol, including LLM-extracted themes."""
+    """
+    Compute aggregate sentiment score for a symbol.
+
+    Runs three LLM tasks in parallel (when an API key is configured):
+      1. Theme extraction — trending catalysts from top posts
+      2. News sentiment  — avg airlock score from recent news articles
+      3. Whisper number  — crowd expectation (only when earnings ≤7 days)
+    """
+    from datetime import date as _date
+    from app.services import market_service as _market_svc
+    from app.services import news_service as _news_svc
+
     posts = await get_posts(symbol, limit=40)
 
     if not posts:
@@ -306,9 +317,38 @@ async def get_sentiment(symbol: str) -> SentimentScore:
         else "neutral"
     )
 
-    # Extract trending themes from top posts via Claude Haiku (skipped if no API key)
     top_texts = [p.content for p in sorted(posts, key=lambda p: p.engagement, reverse=True)[:15]]
-    themes = await airlock.extract_themes(symbol, top_texts)
+
+    # Check for upcoming earnings to decide whether to run whisper extraction
+    earnings_event = await _market_svc.get_upcoming_earnings(symbol)
+    earnings_near = False
+    if earnings_event:
+        try:
+            days_away = (_date.fromisoformat(earnings_event.report_date) - _date.today()).days
+            earnings_near = 0 <= days_away <= 7
+        except Exception:
+            pass
+
+    # Parallel: themes + news items fetch (+ whisper when earnings near)
+    parallel_tasks = [
+        airlock.extract_themes(symbol, top_texts),
+        _news_svc.get_news_for_ticker(symbol, limit=10),
+    ]
+    if earnings_near:
+        parallel_tasks.append(airlock.extract_whisper(symbol, top_texts))
+
+    results = await asyncio.gather(*parallel_tasks)
+    themes: list[str] = results[0]
+    news_items = results[1]
+    whisper: str | None = results[2] if earnings_near else None
+
+    # News sentiment: average of scored news articles (uses news cache — usually free)
+    news_scores = [
+        item.sentiment_score
+        for item in news_items
+        if item.sentiment_score is not None
+    ]
+    news_sentiment = round(sum(news_scores) / len(news_scores), 3) if news_scores else None
 
     return SentimentScore(
         score=round(avg, 3),
@@ -318,6 +358,8 @@ async def get_sentiment(symbol: str) -> SentimentScore:
         post_volume=len(posts),
         window_hours=24,
         themes=themes,
+        news_sentiment=news_sentiment,
+        whisper=whisper,
     )
 
 

@@ -32,6 +32,10 @@ _EARNINGS_TTL = 3600.0
 _candles_cache: dict[str, tuple[float, list[CandlePoint]]] = {}  # symbol → (ts, points)
 _CANDLES_TTL = 300.0
 
+# Daily candles — 1-hour TTL (one data point per market day, rarely changes intraday)
+_daily_candles_cache: dict[str, tuple[float, list[CandlePoint]]] = {}
+_DAILY_CANDLES_TTL = 3600.0
+
 
 async def get_quote(symbol: str) -> Ticker | None:
     """Fetch a single real-time quote from Finnhub."""
@@ -200,3 +204,58 @@ async def get_candles_batch(symbols: list[str]) -> dict[str, list[CandlePoint]]:
     """Fetch intraday candles for multiple symbols concurrently."""
     results = await asyncio.gather(*[_get_candles_for_symbol(s) for s in symbols])
     return {symbol: pts for symbol, pts in zip(symbols, results)}
+
+
+async def get_daily_candles(symbol: str, days: int = 10) -> list[CandlePoint]:
+    """
+    Fetch daily (end-of-day) close prices for the last `days` calendar days.
+    Used to overlay price action on the 7-day sentiment trend chart.
+    Finnhub resolution='D' returns one bar per market day.
+    """
+    now_mono = time.monotonic()
+    cached = _daily_candles_cache.get(symbol)
+    if cached and (now_mono - cached[0]) < _DAILY_CANDLES_TTL:
+        return cached[1]
+
+    if not settings.finnhub_api_key:
+        _daily_candles_cache[symbol] = (now_mono, [])
+        return []
+
+    from datetime import datetime, timezone, timedelta
+    now_ts = int(datetime.now(timezone.utc).timestamp())
+    from_ts = int((datetime.now(timezone.utc) - timedelta(days=days)).timestamp())
+
+    try:
+        resp = await _http.get(
+            f"{FINNHUB_BASE}/stock/candle",
+            params={
+                "symbol": symbol,
+                "resolution": "D",
+                "from": from_ts,
+                "to": now_ts,
+                "token": settings.finnhub_api_key,
+            },
+        )
+        if resp.status_code != 200:
+            _daily_candles_cache[symbol] = (now_mono, [])
+            return []
+
+        data = resp.json()
+        if data.get("s") != "ok":
+            _daily_candles_cache[symbol] = (now_mono, [])
+            return []
+
+        points = [
+            CandlePoint(t=t, c=c)
+            for t, c in zip(data.get("t", []), data.get("c", []))
+        ]
+        _daily_candles_cache[symbol] = (now_mono, points)
+        return points
+    except Exception:
+        _daily_candles_cache[symbol] = (now_mono, [])
+        return []
+
+
+async def get_upcoming_earnings(symbol: str) -> "EarningsEvent | None":
+    """Return the nearest upcoming earnings event (within 7 days), else None."""
+    return await _get_earnings_for_symbol(symbol)

@@ -29,6 +29,11 @@ async def get_earnings(symbols: str = Query(..., description="Comma-separated ti
     return await market_service.get_earnings_calendar(symbol_list)
 
 
+@router.get("/candles/daily", response_model=list[CandlePoint])
+async def get_daily_candles(symbol: str = Query(..., description="Ticker symbol")):
+    return await market_service.get_daily_candles(symbol.upper())
+
+
 @router.get("/candles", response_model=dict[str, list[CandlePoint]])
 async def get_candles(symbols: str = Query(..., description="Comma-separated ticker symbols")):
     symbol_list = [s.strip().upper() for s in symbols.split(",") if s.strip()]

@@ -132,6 +132,47 @@ Example output: ["#EarningsBeat", "#AnalystUpgrade"]
 """
 
 
+_WHISPER_PROMPT = """\
+You are a financial analyst reading social media posts about a stock with an upcoming catalyst (earnings, FDA decision, contract).
+Extract the "whisper number" — the specific metric the crowd expects, beyond the official consensus.
+
+Rules:
+- Return ONLY a JSON object: {"whisper": "<string or null>"}
+- Be specific and numeric (e.g. "crowd expects >$2.1B rev & ~$0.92 EPS vs $1.85B consensus")
+- If posts discuss beating/missing estimates, include that framing
+- If no specific expectations are findable, return {"whisper": null}
+- Keep the whisper string under 120 characters
+"""
+
+
+async def extract_whisper(ticker: str, post_texts: list[str]) -> str | None:
+    """
+    Use Claude Haiku to extract the crowd's whisper number from pre-catalyst posts.
+    Only called when earnings or a major catalyst is within 7 days.
+    Returns None when no API key is configured or no whisper is detectable.
+    """
+    if not settings.anthropic_api_key or not post_texts:
+        return None
+
+    client = _get_client()
+    combined = "\n---\n".join(t[:200] for t in post_texts[:15])
+    user_msg = f"Ticker: ${ticker}\n\nRecent posts:\n{combined[:3000]}"
+
+    try:
+        response = await client.messages.create(
+            model="claude-haiku-4-5-20251001",
+            max_tokens=100,
+            system=_WHISPER_PROMPT,
+            messages=[{"role": "user", "content": user_msg}],
+        )
+        raw = response.content[0].text.strip()
+        data = json.loads(raw)
+        whisper = data.get("whisper")
+        return str(whisper) if whisper and whisper != "null" else None
+    except Exception:
+        return None
+
+
 async def extract_themes(ticker: str, post_texts: list[str]) -> list[str]:
     """
     Use Claude Haiku to extract 2-3 trending catalyst themes from social posts.

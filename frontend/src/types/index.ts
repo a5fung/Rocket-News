@@ -65,13 +65,15 @@ export type SentimentTrend = 'rising' | 'falling' | 'neutral';
 export type SentimentSource = 'reddit' | 'x' | 'stocktwits';
 
 export interface SentimentScore {
-  score: number;          // -1 to 1 aggregate
-  bullishPct: number;     // 0-100
-  bearishPct: number;     // 0-100
+  score: number;              // -1 to 1 aggregate
+  bullishPct: number;         // 0-100
+  bearishPct: number;         // 0-100
   trend: SentimentTrend;
-  postVolume: number;     // number of posts scored in window
-  windowHours: number;   // e.g. 24
-  themes: string[];       // LLM-extracted trending catalysts e.g. ["#EarningsBeat"]
+  postVolume: number;         // number of posts scored in window
+  windowHours: number;        // e.g. 24
+  themes: string[];           // LLM-extracted trending catalysts e.g. ["#EarningsBeat"]
+  newsSentiment?: number;     // avg airlock score of recent news articles (-1..1)
+  whisper?: string;           // crowd expectation when earnings within 7 days
 }
 
 export interface SentimentDataPoint {

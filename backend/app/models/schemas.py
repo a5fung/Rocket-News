@@ -91,7 +91,9 @@ class SentimentScore(_CamelModel):
     trend: Literal["rising", "falling", "neutral"]
     post_volume: int
     window_hours: int
-    themes: list[str] = []  # LLM-extracted trending catalysts e.g. ["#EarningsBeat"]
+    themes: list[str] = []          # LLM-extracted trending catalysts e.g. ["#EarningsBeat"]
+    news_sentiment: float | None = None  # avg airlock score of recent news articles (-1..1)
+    whisper: str | None = None           # crowd expectation extracted when earnings ≤7 days
 
 
 class SentimentDataPoint(_CamelModel):

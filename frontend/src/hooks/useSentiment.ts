@@ -1,29 +1,35 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { fetchSentimentAll } from '@/lib/api';
-import type { SentimentDataPoint, SentimentPost, SentimentScore } from '@/types';
+import { fetchDailyCandles, fetchSentimentAll } from '@/lib/api';
+import type { CandlePoint, SentimentDataPoint, SentimentPost, SentimentScore } from '@/types';
 
 export function useSentiment(symbol: string | null) {
   const [score, setScore] = useState<SentimentScore | null>(null);
   const [history, setHistory] = useState<SentimentDataPoint[]>([]);
   const [posts, setPosts] = useState<SentimentPost[]>([]);
+  const [priceHistory, setPriceHistory] = useState<CandlePoint[]>([]);
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
     if (!symbol) return;
     setLoading(true);
 
-    // Single combined request — 1 round trip instead of 3
-    fetchSentimentAll(symbol, 7, 20).then((result) => {
+    Promise.all([
+      fetchSentimentAll(symbol, 7, 20),
+      fetchDailyCandles(symbol),
+    ]).then(([sentResult, priceResult]) => {
       setLoading(false);
-      if (!result.error) {
-        setScore(result.data.score);
-        setHistory(result.data.history);
-        setPosts(result.data.posts);
+      if (!sentResult.error) {
+        setScore(sentResult.data.score);
+        setHistory(sentResult.data.history);
+        setPosts(sentResult.data.posts);
+      }
+      if (!priceResult.error) {
+        setPriceHistory(priceResult.data);
       }
     });
   }, [symbol]);
 
-  return { score, history, posts, loading };
+  return { score, history, posts, priceHistory, loading };
 }

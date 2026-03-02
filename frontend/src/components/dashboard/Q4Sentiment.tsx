@@ -5,6 +5,7 @@ import {
   Area,
   Bar,
   ComposedChart,
+  Line,
   ReferenceLine,
   ResponsiveContainer,
   Tooltip,
@@ -12,7 +13,7 @@ import {
   YAxis,
 } from 'recharts';
 import { useSentiment } from '@/hooks/useSentiment';
-import type { SentimentDataPoint, SentimentSource } from '@/types';
+import type { CandlePoint, SentimentDataPoint, SentimentSource } from '@/types';
 
 interface Props {
   selectedSymbol: string | null;
@@ -118,11 +119,28 @@ function PostContent({
 
 // ── Score bar (The Header) ─────────────────────────────────────────────────────
 
-function ScoreBar({ score, bullish, bearish }: { score: number; bullish: number; bearish: number }) {
+function MiniBar({ label, composite, color }: { label: string; composite: number; color: string }) {
+  return (
+    <div className="flex items-center gap-2">
+      <span className="text-[10px] text-gray-500 w-10 shrink-0">{label}</span>
+      <div className="flex-1 h-1.5 rounded-full bg-surface-border overflow-hidden">
+        <div className="h-full rounded-full transition-all duration-500" style={{ width: `${composite}%`, backgroundColor: color }} />
+      </div>
+      <span className="text-[10px] font-mono text-gray-400 w-5 text-right shrink-0">{composite}</span>
+    </div>
+  );
+}
+
+function ScoreBar({ score, bullish, bearish, newsSentiment }: {
+  score: number; bullish: number; bearish: number; newsSentiment?: number | null;
+}) {
   const composite = toComposite(score);
   const label = compositeLabel(composite);
   const { bar, text } = compositeColors(composite);
   const neutral = Math.max(0, Math.round(100 - bullish - bearish));
+
+  const newsComposite = newsSentiment != null ? toComposite(newsSentiment) : null;
+  const newsColor = newsComposite != null ? compositeColors(newsComposite).bar : '#374151';
 
   return (
     <div className="px-4 pt-3 pb-2 shrink-0">
@@ -154,6 +172,14 @@ function ScoreBar({ score, bullish, bearish }: { score: number; bullish: number;
         <span className="absolute left-1/2 -translate-x-1/2 text-[10px] text-gray-600">50</span>
         <span className="absolute right-0 text-[10px] text-gray-600">100</span>
       </div>
+
+      {/* News vs Social mini-bars */}
+      {newsComposite != null && (
+        <div className="mt-2.5 pt-2 border-t border-surface-border/60 flex flex-col gap-1">
+          <MiniBar label="Social" composite={composite} color={bar} />
+          <MiniBar label="News" composite={newsComposite} color={newsColor} />
+        </div>
+      )}
     </div>
   );
 }
@@ -181,24 +207,51 @@ function TrendingThemes({ themes }: { themes: string[] }) {
 function ChartTooltip({ active, payload }: { active?: boolean; payload?: Array<{ value: number; dataKey: string }> }) {
   if (!active || !payload?.length) return null;
   const composite = payload.find(p => p.dataKey === 'composite')?.value;
+  const price = payload.find(p => p.dataKey === 'price')?.value;
   const volume = payload.find(p => p.dataKey === 'volume')?.value;
   return (
     <div className="bg-surface-raised border border-surface-border rounded px-2 py-1 text-xs">
       {composite !== undefined && (
         <p className={composite > 50 ? 'text-bull' : composite < 50 ? 'text-bear' : 'text-gray-400'}>
-          {composite} / 100
+          Sentiment: {composite}
         </p>
       )}
+      {price !== undefined && <p className="text-amber-400">${(price as number).toFixed(2)}</p>}
       {volume !== undefined && <p className="text-gray-400">{volume} posts</p>}
     </div>
   );
 }
 
-function SentimentChart({ history }: { history: SentimentDataPoint[] }) {
-  // Normalise history to the same 0–100 composite scale used by the gauge above
-  const data = history.map(d => ({ ...d, composite: toComposite(d.score) }));
+function SentimentChart({ history, priceHistory }: { history: SentimentDataPoint[]; priceHistory: CandlePoint[] }) {
+  // Build date → close price lookup from daily candles
+  const priceByDate = new Map(
+    priceHistory.map(p => [new Date(p.t * 1000).toISOString().slice(0, 10), p.c])
+  );
+
+  // Aggregate sentiment history by calendar date (avg composite + total volume per day)
+  const dateMap = new Map<string, { compositeSum: number; count: number; vol: number }>();
+  for (const d of history) {
+    const date = d.timestamp.slice(0, 10);
+    const prev = dateMap.get(date) ?? { compositeSum: 0, count: 0, vol: 0 };
+    dateMap.set(date, { compositeSum: prev.compositeSum + toComposite(d.score), count: prev.count + 1, vol: prev.vol + d.volume });
+  }
+
+  const data = Array.from(dateMap.entries())
+    .sort(([a], [b]) => a.localeCompare(b))
+    .map(([date, v]) => ({
+      date,
+      composite: Math.round(v.compositeSum / v.count),
+      volume: v.vol,
+      price: priceByDate.get(date),
+    }));
+
+  const hasPrices = data.some(d => d.price !== undefined);
   const avg = data.reduce((s, d) => s + d.composite, 0) / (data.length || 1);
-  const lineColor = avg >= 62 ? '#22c55e' : avg <= 38 ? '#ef4444' : '#9ca3af';
+  const sentColor = avg >= 62 ? '#22c55e' : avg <= 38 ? '#ef4444' : '#9ca3af';
+
+  const prices = data.map(d => d.price).filter((p): p is number => p !== undefined);
+  const pMin = prices.length ? Math.min(...prices) * 0.995 : 0;
+  const pMax = prices.length ? Math.max(...prices) * 1.005 : 1;
 
   return (
     <div className="px-2 pb-1 border-t border-surface-border shrink-0">
@@ -207,19 +260,40 @@ function SentimentChart({ history }: { history: SentimentDataPoint[] }) {
         <p className="text-[9px] text-gray-600">bars = post vol</p>
       </div>
       <ResponsiveContainer width="100%" height={90}>
-        <ComposedChart data={data} margin={{ top: 2, right: 4, left: 0, bottom: 0 }}>
-          <XAxis dataKey="timestamp" hide />
+        <ComposedChart data={data} margin={{ top: 2, right: hasPrices ? 30 : 4, left: 0, bottom: 0 }}>
+          <XAxis dataKey="date" hide />
           <YAxis yAxisId="score" domain={[0, 100]} ticks={[0, 50, 100]}
             tickFormatter={v => String(v)}
             tick={{ fontSize: 9, fill: '#6b7280' }} width={22} />
+          {hasPrices && (
+            <YAxis yAxisId="price" orientation="right" domain={[pMin, pMax]}
+              tickFormatter={v => `$${(v as number).toFixed(0)}`}
+              tick={{ fontSize: 9, fill: '#f59e0b' }} width={30} />
+          )}
           <YAxis yAxisId="vol" orientation="right" hide domain={[0, 'dataMax']} />
           <Bar yAxisId="vol" dataKey="volume" fill="#374151" opacity={0.35} radius={[1, 1, 0, 0]} />
           <Area yAxisId="score" type="monotone" dataKey="composite"
-            stroke={lineColor} strokeWidth={1.5} fill={lineColor} fillOpacity={0.15} dot={false} activeDot={false} />
+            stroke={sentColor} strokeWidth={1.5} fill={sentColor} fillOpacity={0.15} dot={false} activeDot={false} />
+          {hasPrices && (
+            <Line yAxisId="price" type="monotone" dataKey="price"
+              stroke="#f59e0b" strokeWidth={1.5} dot={false} activeDot={false} strokeDasharray="4 2" connectNulls />
+          )}
           <ReferenceLine yAxisId="score" y={50} stroke="#374151" strokeDasharray="3 3" />
           <Tooltip content={<ChartTooltip />} cursor={{ stroke: '#374151', strokeWidth: 1 }} />
         </ComposedChart>
       </ResponsiveContainer>
+      {hasPrices && (
+        <div className="flex items-center gap-3 px-1 pb-0.5">
+          <span className="flex items-center gap-1 text-[9px] text-gray-500">
+            <span className="inline-block w-3 h-px" style={{ backgroundColor: sentColor }} />
+            Sentiment
+          </span>
+          <span className="flex items-center gap-1 text-[9px] text-gray-500">
+            <span className="inline-block w-4 border-t-2 border-dashed border-amber-400" />
+            Price
+          </span>
+        </div>
+      )}
     </div>
   );
 }
@@ -264,7 +338,7 @@ function PostSkeleton() {
 
 export default function Q4Sentiment({ selectedSymbol, symbols, onSelectTicker }: Props) {
   const symbol = selectedSymbol ?? symbols[0] ?? null;
-  const { score, history, posts, loading } = useSentiment(symbol);
+  const { score, history, posts, priceHistory, loading } = useSentiment(symbol);
   const symbolSet = useMemo(() => new Set(symbols), [symbols]);
 
   const trendColor =
@@ -333,16 +407,26 @@ export default function Q4Sentiment({ selectedSymbol, symbols, onSelectTicker }:
           </>
         )}
 
-        {/* ── Score bar ── */}
+        {/* ── Score bar (includes News vs Social mini-bars) ── */}
         {score && (
-          <ScoreBar score={score.score} bullish={score.bullishPct} bearish={score.bearishPct} />
+          <ScoreBar score={score.score} bullish={score.bullishPct} bearish={score.bearishPct} newsSentiment={score.newsSentiment} />
+        )}
+
+        {/* ── Whisper number (earnings catalyst only) ── */}
+        {score?.whisper && (
+          <div className="mx-4 mb-1 px-3 py-2 rounded border border-amber-500/30 bg-amber-500/8 shrink-0">
+            <div className="flex items-start gap-2">
+              <span className="text-[10px] font-bold text-amber-400 tracking-wider shrink-0 mt-px">WHISPER</span>
+              <span className="text-xs text-gray-300 leading-snug">{score.whisper}</span>
+            </div>
+          </div>
         )}
 
         {/* ── Trending themes (LLM-extracted) ── */}
         {score && <TrendingThemes themes={score.themes ?? []} />}
 
-        {/* ── 7-day chart ── */}
-        {history.length > 0 && <SentimentChart history={history} />}
+        {/* ── 7-day chart (sentiment + price overlay) ── */}
+        {history.length > 0 && <SentimentChart history={history} priceHistory={priceHistory} />}
 
         {/* ── Post feed ── */}
         {!loading && (

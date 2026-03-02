@@ -54,6 +54,10 @@ export async function fetchCandles(symbols: string[]): Promise<ApiResult<Record<
   return request<Record<string, CandlePoint[]>>(`/market/candles?symbols=${symbols.join(',')}`);
 }
 
+export async function fetchDailyCandles(symbol: string): Promise<ApiResult<CandlePoint[]>> {
+  return request<CandlePoint[]>(`/market/candles/daily?symbol=${symbol}`);
+}
+
 export async function fetchMoveTags(
   movers: Array<{ symbol: string; changePercent: number }>,
 ): Promise<ApiResult<MoveTag[]>> {
