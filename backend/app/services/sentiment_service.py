@@ -14,6 +14,7 @@ Reddit:
 """
 
 import asyncio
+import html as _html
 import logging
 import re
 import time
@@ -147,7 +148,7 @@ async def _fetch_stocktwits(symbol: str, limit: int = 30) -> list[SentimentPost]
         posts.append(SentimentPost(
             id=str(msg.get("id", uuid.uuid4())),
             ticker=symbol,
-            content=msg.get("body", ""),
+            content=_html.unescape(msg.get("body", "")),
             source="stocktwits",
             author=user.get("username", "unknown"),
             engagement=engagement,
@@ -228,7 +229,7 @@ async def _fetch_reddit(symbol: str) -> list[SentimentPost]:
         posts.append(SentimentPost(
             id=data.get("id", str(uuid.uuid4())),
             ticker=symbol,
-            content=data.get("title", ""),
+            content=_html.unescape(data.get("title", "")),
             source="reddit",
             author=data.get("author", "unknown"),
             engagement=data.get("score", 0) + data.get("num_comments", 0),

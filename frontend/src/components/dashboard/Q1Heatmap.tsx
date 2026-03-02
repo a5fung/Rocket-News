@@ -242,8 +242,8 @@ function TickerTile({
         );
       })()}
 
-      {/* Company name */}
-      <span className="text-xs text-white/40 leading-none mt-0.5 truncate max-w-full px-1">
+      {/* Company name — hidden on mobile to reclaim space for larger % change */}
+      <span className="hidden md:inline text-xs text-white/40 leading-none mt-0.5 truncate max-w-full px-1">
         {ticker.name}
       </span>
     </button>

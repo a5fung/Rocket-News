@@ -1,5 +1,6 @@
 'use client';
 
+import { useMemo } from 'react';
 import {
   Area,
   Bar,
@@ -16,6 +17,7 @@ import type { SentimentDataPoint, SentimentSource } from '@/types';
 interface Props {
   selectedSymbol: string | null;
   symbols: string[];
+  onSelectTicker: (symbol: string) => void;
 }
 
 // ── Helpers ────────────────────────────────────────────────────────────────────
@@ -73,12 +75,54 @@ function PlatformIcon({ source }: { source: SentimentSource }) {
   );
 }
 
+// ── Cashtag renderer ───────────────────────────────────────────────────────────
+
+/**
+ * Splits post text on $TICKER cashtags. Tickers in the watchlist become
+ * clickable chips that switch the dashboard's active symbol. Others get a
+ * subtle highlight so they're still visually distinct without being interactive.
+ */
+function PostContent({
+  content,
+  symbolSet,
+  onSelectTicker,
+}: {
+  content: string;
+  symbolSet: Set<string>;
+  onSelectTicker: (symbol: string) => void;
+}) {
+  const parts = content.split(/(\$[A-Z]{1,5}\b)/g);
+  return (
+    <>
+      {parts.map((part, i) => {
+        if (/^\$[A-Z]{1,5}$/.test(part)) {
+          const ticker = part.slice(1);
+          if (symbolSet.has(ticker)) {
+            return (
+              <button
+                key={i}
+                className="text-accent font-semibold hover:underline focus:outline-none"
+                onClick={(e) => { e.preventDefault(); e.stopPropagation(); onSelectTicker(ticker); }}
+              >
+                {part}
+              </button>
+            );
+          }
+          return <span key={i} className="text-blue-400/60 font-medium">{part}</span>;
+        }
+        return <span key={i}>{part}</span>;
+      })}
+    </>
+  );
+}
+
 // ── Score bar (The Header) ─────────────────────────────────────────────────────
 
 function ScoreBar({ score, bullish, bearish }: { score: number; bullish: number; bearish: number }) {
   const composite = toComposite(score);
   const label = compositeLabel(composite);
   const { bar, text } = compositeColors(composite);
+  const neutral = Math.max(0, Math.round(100 - bullish - bearish));
 
   return (
     <div className="px-4 pt-3 pb-2 shrink-0">
@@ -89,9 +133,10 @@ function ScoreBar({ score, bullish, bearish }: { score: number; bullish: number;
           </span>
           <span className="text-sm font-semibold ml-2" style={{ color: text }}>{label}</span>
         </div>
-        <div className="text-right text-xs text-gray-500 leading-tight">
-          <div>{bullish.toFixed(0)}% bull</div>
-          <div>{bearish.toFixed(0)}% bear</div>
+        <div className="text-right text-xs leading-tight">
+          <div className="text-green-400">{bullish.toFixed(0)}% bull</div>
+          <div className="text-red-400">{bearish.toFixed(0)}% bear</div>
+          <div className="text-gray-500">{neutral}% neutral</div>
         </div>
       </div>
 
@@ -135,13 +180,13 @@ function TrendingThemes({ themes }: { themes: string[] }) {
 
 function ChartTooltip({ active, payload }: { active?: boolean; payload?: Array<{ value: number; dataKey: string }> }) {
   if (!active || !payload?.length) return null;
-  const score = payload.find(p => p.dataKey === 'pos' || p.dataKey === 'neg')?.value;
+  const composite = payload.find(p => p.dataKey === 'composite')?.value;
   const volume = payload.find(p => p.dataKey === 'volume')?.value;
   return (
     <div className="bg-surface-raised border border-surface-border rounded px-2 py-1 text-xs">
-      {score !== undefined && (
-        <p className={score > 0 ? 'text-bull' : score < 0 ? 'text-bear' : 'text-gray-400'}>
-          {score > 0 ? '+' : ''}{score.toFixed(2)}
+      {composite !== undefined && (
+        <p className={composite > 50 ? 'text-bull' : composite < 50 ? 'text-bear' : 'text-gray-400'}>
+          {composite} / 100
         </p>
       )}
       {volume !== undefined && <p className="text-gray-400">{volume} posts</p>}
@@ -150,23 +195,28 @@ function ChartTooltip({ active, payload }: { active?: boolean; payload?: Array<{
 }
 
 function SentimentChart({ history }: { history: SentimentDataPoint[] }) {
-  const data = history.map(d => ({ ...d, pos: Math.max(0, d.score), neg: Math.min(0, d.score) }));
+  // Normalise history to the same 0–100 composite scale used by the gauge above
+  const data = history.map(d => ({ ...d, composite: toComposite(d.score) }));
+  const avg = data.reduce((s, d) => s + d.composite, 0) / (data.length || 1);
+  const lineColor = avg >= 62 ? '#22c55e' : avg <= 38 ? '#ef4444' : '#9ca3af';
+
   return (
     <div className="px-2 pb-1 border-t border-surface-border shrink-0">
-      <p className="text-xs text-gray-500 px-1 pt-1.5 pb-0.5">7-day trend</p>
+      <div className="flex items-baseline justify-between px-1 pt-1.5 pb-0.5">
+        <p className="text-xs text-gray-500">7-day trend</p>
+        <p className="text-[9px] text-gray-600">bars = post vol</p>
+      </div>
       <ResponsiveContainer width="100%" height={90}>
         <ComposedChart data={data} margin={{ top: 2, right: 4, left: 0, bottom: 0 }}>
           <XAxis dataKey="timestamp" hide />
-          <YAxis yAxisId="score" domain={[-1, 1]} tickCount={3}
-            tickFormatter={v => v === 0 ? '0' : v > 0 ? '+' : '−'}
-            tick={{ fontSize: 9, fill: '#6b7280' }} width={18} />
+          <YAxis yAxisId="score" domain={[0, 100]} ticks={[0, 50, 100]}
+            tickFormatter={v => String(v)}
+            tick={{ fontSize: 9, fill: '#6b7280' }} width={22} />
           <YAxis yAxisId="vol" orientation="right" hide domain={[0, 'dataMax']} />
           <Bar yAxisId="vol" dataKey="volume" fill="#374151" opacity={0.35} radius={[1, 1, 0, 0]} />
-          <Area yAxisId="score" type="monotone" dataKey="pos"
-            stroke="#22c55e" strokeWidth={1.5} fill="#22c55e" fillOpacity={0.2} dot={false} activeDot={false} />
-          <Area yAxisId="score" type="monotone" dataKey="neg"
-            stroke="#ef4444" strokeWidth={1.5} fill="#ef4444" fillOpacity={0.2} dot={false} activeDot={false} />
-          <ReferenceLine yAxisId="score" y={0} stroke="#374151" strokeDasharray="3 3" />
+          <Area yAxisId="score" type="monotone" dataKey="composite"
+            stroke={lineColor} strokeWidth={1.5} fill={lineColor} fillOpacity={0.15} dot={false} activeDot={false} />
+          <ReferenceLine yAxisId="score" y={50} stroke="#374151" strokeDasharray="3 3" />
           <Tooltip content={<ChartTooltip />} cursor={{ stroke: '#374151', strokeWidth: 1 }} />
         </ComposedChart>
       </ResponsiveContainer>
@@ -212,9 +262,10 @@ function PostSkeleton() {
 
 // ── Main component ─────────────────────────────────────────────────────────────
 
-export default function Q4Sentiment({ selectedSymbol, symbols }: Props) {
+export default function Q4Sentiment({ selectedSymbol, symbols, onSelectTicker }: Props) {
   const symbol = selectedSymbol ?? symbols[0] ?? null;
   const { score, history, posts, loading } = useSentiment(symbol);
+  const symbolSet = useMemo(() => new Set(symbols), [symbols]);
 
   const trendColor =
     score?.trend === 'rising'  ? 'text-bull' :
@@ -335,7 +386,7 @@ export default function Q4Sentiment({ selectedSymbol, symbols }: Props) {
                   </div>
                 </div>
                 <p className="text-xs text-gray-300 line-clamp-2 leading-snug pl-5">
-                  {post.content}
+                  <PostContent content={post.content} symbolSet={symbolSet} onSelectTicker={onSelectTicker} />
                 </p>
               </a>
             );

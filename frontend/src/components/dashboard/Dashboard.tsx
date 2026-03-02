@@ -108,7 +108,7 @@ export default function Dashboard() {
         <Q1Heatmap tickers={tickers} earnings={earnings} moveTags={moveTags} sparklines={sparklines} positions={positions} loading={heatmapLoading} error={marketError} {...sharedProps} />
         <Q2NewsFeed news={news} symbols={symbols} loading={newsLoading} {...sharedProps} />
         <Q3AIChat getContext={getDashboardContext} selectedSymbol={selectedSymbol} tickers={tickers} />
-        <Q4Sentiment selectedSymbol={selectedSymbol} symbols={symbols} />
+        <Q4Sentiment selectedSymbol={selectedSymbol} symbols={symbols} onSelectTicker={setSelectedSymbol} />
       </main>
 
       {/* ── Mobile layout: 2-tab split-pane ────────────────────────────── */}
@@ -136,7 +136,7 @@ export default function Dashboard() {
                 <Q1Heatmap tickers={tickers} earnings={earnings} moveTags={moveTags} sparklines={sparklines} positions={positions} loading={heatmapLoading} error={marketError} {...sharedProps} />
               </div>
               <div className="flex-1 min-h-0 grid">
-                <Q4Sentiment selectedSymbol={selectedSymbol} symbols={symbols} />
+                <Q4Sentiment selectedSymbol={selectedSymbol} symbols={symbols} onSelectTicker={setSelectedSymbol} />
               </div>
             </div>
           )}
