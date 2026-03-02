@@ -25,11 +25,11 @@ async def get_sentiment_all(
     and history run concurrently — eliminating the double Reddit fetch.
     """
     sym = symbol.upper()
+    # Warm the posts cache first so get_sentiment() is fast (dict lookup + math)
     posts = await sentiment_service.get_posts(sym, limit=limit)
-    score, history = await asyncio.gather(
-        sentiment_service.get_sentiment(sym),
-        sentiment_service.get_sentiment_history(sym, days=days),
-    )
+    score = await sentiment_service.get_sentiment(sym)
+    # Pass the real score so the history walk ends exactly where the gauge reads
+    history = await sentiment_service.get_sentiment_history(sym, days=days, current_score=score.score)
     return SentimentBundle(score=score, history=history, posts=posts)
 
 

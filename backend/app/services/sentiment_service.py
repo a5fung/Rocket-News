@@ -363,10 +363,18 @@ async def get_sentiment(symbol: str) -> SentimentScore:
     )
 
 
-async def get_sentiment_history(symbol: str, days: int = 7) -> list[SentimentDataPoint]:
+async def get_sentiment_history(
+    symbol: str,
+    days: int = 7,
+    current_score: float = 0.0,
+) -> list[SentimentDataPoint]:
     """
     Placeholder for Supabase time-series query.
-    Uses seeded random walk so the same symbol always shows the same shape.
+
+    Generates a seeded random walk (reproducible per symbol) then applies a
+    linear offset so the final point lands exactly on `current_score`. This
+    ensures the chart always ends where the live gauge reads — avoiding the
+    confusing case where a stock shows "65 Bullish" but the chart trends red.
     """
     import hashlib
     import random
@@ -375,17 +383,29 @@ async def get_sentiment_history(symbol: str, days: int = 7) -> list[SentimentDat
     seed = int(hashlib.md5(symbol.encode()).hexdigest()[:8], 16)
     rng = random.Random(seed)
 
-    base_score = rng.uniform(-0.3, 0.3)
-    history = []
     buckets = days * 4  # 6-hour buckets
 
-    for i in range(buckets):
+    # Generate raw walk
+    raw: list[float] = []
+    val = rng.uniform(-0.3, 0.3)
+    for _ in range(buckets):
+        val += rng.uniform(-0.18, 0.18)
+        val = max(-0.9, min(0.9, val))
+        raw.append(val)
+
+    # Linearly shift so the last point equals current_score
+    end_delta = current_score - raw[-1]
+    adjusted = [
+        max(-0.9, min(0.9, v + end_delta * (i / max(buckets - 1, 1))))
+        for i, v in enumerate(raw)
+    ]
+
+    history = []
+    for i, score in enumerate(adjusted):
         ts = datetime.now(timezone.utc) - timedelta(hours=(buckets - i) * 6)
-        base_score += rng.uniform(-0.18, 0.18)
-        base_score = max(-0.9, min(0.9, base_score))
         history.append(SentimentDataPoint(
             timestamp=ts.isoformat(),
-            score=round(base_score, 3),
+            score=round(score, 3),
             volume=rng.randint(8, 120),
         ))
     return history
