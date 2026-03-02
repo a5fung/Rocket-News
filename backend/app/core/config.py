@@ -9,7 +9,7 @@ class Settings(BaseSettings):
     reddit_user_agent: str = "RocketNews/0.1"
     x_bearer_token: str = ""
     anthropic_api_key: str = ""
-    cors_origins: str = "http://localhost:3000"
+    cors_origins: str = "*"  # override in production via CORS_ORIGINS env var
     # Alpaca paper-trading account — gives free Benzinga news feed
     alpaca_api_key: str = ""
     alpaca_api_secret: str = ""
