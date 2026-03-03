@@ -190,7 +190,7 @@ export async function geminiChat(
 
   const payload = {
     contents: [...systemTurn, ...toContents(messages)],
-    generationConfig: { maxOutputTokens: 1024, temperature: 0.4 },
+    generationConfig: { maxOutputTokens: 2048, temperature: 0.4 },
   };
 
   const models = await listModels(apiKey);
