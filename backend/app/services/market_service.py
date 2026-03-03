@@ -14,6 +14,7 @@ from app.core.config import settings
 from app.models.schemas import CandlePoint, EarningsEvent, Ticker
 
 FINNHUB_BASE = "https://finnhub.io/api/v1"
+ALPACA_DATA_BASE = "https://data.alpaca.markets"
 
 # Shared client — reuses TCP connections across all Finnhub API calls
 _http = httpx.AsyncClient(
@@ -31,6 +32,10 @@ _EARNINGS_TTL = 3600.0
 # Intraday candles — 5-min TTL (candles update every 5 min during market hours)
 _candles_cache: dict[str, tuple[float, list[CandlePoint]]] = {}  # symbol → (ts, points)
 _CANDLES_TTL = 300.0
+
+# Extended-hours quotes from Alpaca — 60s TTL (prices move frequently in ext session)
+_alpaca_cache: tuple[float, dict[str, tuple[float, float]]] | None = None  # (ts, {symbol: (ext_price, ext_chg_pct)})
+_ALPACA_TTL = 60.0
 
 # Daily candles — 1-hour TTL (one data point per market day, rarely changes intraday)
 _daily_candles_cache: dict[str, tuple[float, list[CandlePoint]]] = {}
@@ -78,11 +83,67 @@ async def get_quote(symbol: str) -> Ticker | None:
     )
 
 
+async def _get_alpaca_extended(symbols: list[str]) -> dict[str, tuple[float, float]]:
+    """
+    Fetch the latest trade price for each symbol from Alpaca.
+    Returns {symbol: (ext_price, ext_change_pct_from_close)}.
+    Uses an in-process 60s cache to avoid hammering the API.
+    Falls back to {} if Alpaca keys are not configured or the call fails.
+    """
+    global _alpaca_cache
+    now = time.monotonic()
+    if _alpaca_cache and (now - _alpaca_cache[0]) < _ALPACA_TTL:
+        return _alpaca_cache[1]
+
+    if not (settings.alpaca_api_key and settings.alpaca_api_secret):
+        return {}
+
+    try:
+        resp = await _http.get(
+            f"{ALPACA_DATA_BASE}/v2/stocks/trades/latest",
+            params={"symbols": ",".join(symbols), "feed": "sip"},
+            headers={
+                "APCA-API-KEY-ID": settings.alpaca_api_key,
+                "APCA-API-SECRET-KEY": settings.alpaca_api_secret,
+            },
+        )
+        if resp.status_code != 200:
+            return {}
+
+        trades = resp.json().get("trades", {})
+        result: dict[str, tuple[float, float]] = {}
+        for sym, trade in trades.items():
+            ext_price = trade.get("p")
+            if ext_price is None:
+                continue
+            result[sym] = (float(ext_price), 0.0)  # change% filled in after Finnhub close price is known
+        _alpaca_cache = (now, result)
+        return result
+    except Exception:
+        return {}
+
+
 async def get_quotes(symbols: list[str]) -> list[Ticker]:
-    """Fetch quotes for multiple tickers concurrently."""
-    import asyncio
-    results = await asyncio.gather(*[get_quote(s) for s in symbols])
-    return [r for r in results if r is not None]
+    """Fetch quotes for multiple tickers concurrently, then attach extended-hours data."""
+    finnhub_results, alpaca_ext = await asyncio.gather(
+        asyncio.gather(*[get_quote(s) for s in symbols]),
+        _get_alpaca_extended(symbols),
+    )
+    tickers = [r for r in finnhub_results if r is not None]
+
+    if alpaca_ext:
+        for ticker in tickers:
+            ext = alpaca_ext.get(ticker.symbol)
+            if ext is None:
+                continue
+            ext_price, _ = ext
+            # ext_change_percent = change from the regular-session close
+            close = ticker.price  # after RTH, Finnhub c == last regular close
+            if close > 0:
+                ticker.ext_price = ext_price
+                ticker.ext_change_percent = round((ext_price - close) / close * 100, 4)
+
+    return tickers
 
 
 async def _get_profile(symbol: str) -> dict:

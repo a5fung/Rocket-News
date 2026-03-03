@@ -29,6 +29,8 @@ export interface Ticker {
   marketCap?: number;
   sentiment?: SentimentScore;
   logoUrl?: string;
+  extPrice?: number;          // latest extended-hours trade price (Alpaca)
+  extChangePercent?: number;  // % change from regular close to ext price
 }
 
 // ─── News ─────────────────────────────────────────────────────────────────────

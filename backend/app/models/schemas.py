@@ -27,6 +27,8 @@ class Ticker(_CamelModel):
     market_cap: float | None = None
     sentiment: SentimentScore | None = None
     logo_url: str | None = None
+    ext_price: float | None = None         # latest extended-hours trade price (Alpaca)
+    ext_change_percent: float | None = None  # % change from regular close to ext price
 
 
 # ─── Earnings ─────────────────────────────────────────────────────────────────

@@ -1,7 +1,32 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import type { CandlePoint, EarningsEvent, PortfolioPosition, Ticker } from '@/types';
+
+// ── Market session detection (ET clock) ────────────────────────────────────────
+
+type MarketSession = 'pre' | 'rth' | 'post' | 'closed';
+type SessionMode  = 'rth' | 'ext';
+
+function getMarketSession(): MarketSession {
+  const etTime = new Date(new Date().toLocaleString('en-US', { timeZone: 'America/New_York' }));
+  const day = etTime.getDay(); // 0=Sun, 6=Sat
+  if (day === 0 || day === 6) return 'closed';
+  const mins = etTime.getHours() * 60 + etTime.getMinutes();
+  if (mins < 240)  return 'closed'; // before 4:00 AM
+  if (mins < 570)  return 'pre';    // 4:00–9:30 AM
+  if (mins < 960)  return 'rth';    // 9:30 AM–4:00 PM
+  if (mins < 1200) return 'post';   // 4:00–8:00 PM
+  return 'closed';
+}
+
+function defaultMode(session: MarketSession): SessionMode {
+  return session === 'pre' || session === 'post' ? 'ext' : 'rth';
+}
+
+const SESSION_LABEL: Record<MarketSession, string> = {
+  pre: 'Pre-Market', rth: 'Market Open', post: 'After Hours', closed: 'Market Closed',
+};
 
 function TickerLogo({ url, symbol }: { url?: string; symbol: string }) {
   const [failed, setFailed] = useState(false);
@@ -149,6 +174,7 @@ function TickerTile({
   moveTag,
   sparkline,
   position,
+  sessionMode,
   onClick,
 }: {
   ticker: Ticker;
@@ -158,10 +184,16 @@ function TickerTile({
   moveTag?: string;
   sparkline?: CandlePoint[];
   position?: PortfolioPosition;
+  sessionMode: SessionMode;
   onClick: () => void;
 }) {
-  const { bg, text } = getTileColor(ticker.changePercent, maxAbs);
-  const isUp = ticker.changePercent >= 0;
+  // In EXT mode, use extended-hours data if available; fall back to RTH
+  const showExt = sessionMode === 'ext' && ticker.extChangePercent != null;
+  const activePct   = showExt ? ticker.extChangePercent! : ticker.changePercent;
+  const activePrice = showExt ? (ticker.extPrice ?? ticker.price) : ticker.price;
+
+  const { bg, text } = getTileColor(activePct, maxAbs);
+  const isUp = activePct >= 0;
 
   let earningsBadge: React.ReactNode = null;
   if (earningsEvent) {
@@ -214,9 +246,17 @@ function TickerTile({
         <span className="font-bold text-sm text-white leading-none">{ticker.symbol}</span>
       </div>
 
+      {/* Session badge — AH or PM pill, only in ext mode */}
+      {showExt && (
+        <span className="absolute bottom-1.5 left-1.5 text-[8px] font-bold px-1 py-px rounded
+          leading-none bg-amber-500/80 text-white">
+          AH
+        </span>
+      )}
+
       {/* % Change — most prominent */}
       <span className="font-bold text-lg leading-tight mt-0.5" style={{ color: text }}>
-        {isUp ? '+' : ''}{ticker.changePercent.toFixed(2)}%
+        {isUp ? '+' : ''}{activePct.toFixed(2)}%
       </span>
 
       {/* Move reason tag */}
@@ -229,12 +269,19 @@ function TickerTile({
 
       {/* Price */}
       <span className="text-xs text-white/70 leading-none mt-0.5 font-mono">
-        ${ticker.price.toFixed(2)}
+        ${activePrice.toFixed(2)}
       </span>
+
+      {/* Ghost RTH label — shown in ext mode to keep regular session visible */}
+      {showExt && (
+        <span className="text-[9px] leading-none mt-0.5 text-white/40 font-mono">
+          RTH {ticker.changePercent >= 0 ? '+' : ''}{ticker.changePercent.toFixed(2)}%
+        </span>
+      )}
 
       {/* Unrealized P&L — shown when position is set */}
       {position && (() => {
-        const pnl = (ticker.price - position.costBasis) * position.shares;
+        const pnl = (activePrice - position.costBasis) * position.shares;
         return (
           <span className={`text-xs font-mono font-semibold leading-none mt-0.5 ${pnl >= 0 ? 'text-green-300' : 'text-red-300'}`}>
             {formatPnl(pnl)}
@@ -252,20 +299,41 @@ function TickerTile({
 
 export default function Q1Heatmap({ tickers, earnings, moveTags, sparklines, positions, loading, error, selectedSymbol, onSelectTicker }: Props) {
   const [sortMode, setSortMode] = useState<SortMode>('change');
+  const [session, setSession] = useState<MarketSession>(() => getMarketSession());
+  const [sessionMode, setSessionMode] = useState<SessionMode>(() => defaultMode(getMarketSession()));
+  const [userOverride, setUserOverride] = useState(false);
+
+  // Re-detect session every minute; auto-switch mode unless user has overridden
+  useEffect(() => {
+    const tick = () => {
+      const s = getMarketSession();
+      setSession(s);
+      if (!userOverride) setSessionMode(defaultMode(s));
+    };
+    tick();
+    const id = setInterval(tick, 60_000);
+    return () => clearInterval(id);
+  }, [userOverride]);
+
+  const hasExt = tickers.some((t) => t.extChangePercent != null);
+
   const earningsMap = new Map(earnings.map((e) => [e.symbol, e]));
 
-  const sorted = useMemo(
-    () =>
-      [...tickers].sort((a, b) =>
-        sortMode === 'alpha'
-          ? a.symbol.localeCompare(b.symbol)
-          : b.changePercent - a.changePercent,
-      ),
-    [tickers, sortMode],
-  );
+  const sorted = useMemo(() => {
+    const activePct = (t: Ticker) =>
+      sessionMode === 'ext' && t.extChangePercent != null ? t.extChangePercent : t.changePercent;
+    return [...tickers].sort((a, b) =>
+      sortMode === 'alpha'
+        ? a.symbol.localeCompare(b.symbol)
+        : activePct(b) - activePct(a),
+    );
+  }, [tickers, sortMode, sessionMode]);
 
-  // Normalisation baseline — biggest |% change| in today's watchlist
-  const maxAbs = sorted.reduce((m, t) => Math.max(m, Math.abs(t.changePercent)), 0.01);
+  // Normalisation baseline uses whichever session is active
+  const maxAbs = sorted.reduce((m, t) => {
+    const pct = sessionMode === 'ext' && t.extChangePercent != null ? t.extChangePercent : t.changePercent;
+    return Math.max(m, Math.abs(pct));
+  }, 0.01);
 
   const count = sorted.length;
   const cols = gridCols(count);
@@ -274,9 +342,30 @@ export default function Q1Heatmap({ tickers, earnings, moveTags, sparklines, pos
   return (
     <section className="quadrant">
       <div className="quadrant-header">
-        <span className="quadrant-title">Heatmap</span>
+        <div className="flex items-center gap-1.5">
+          <span className="quadrant-title">Heatmap</span>
+          <span className="text-[9px] text-gray-600">{SESSION_LABEL[session]}</span>
+        </div>
 
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-2">
+          {/* RTH / EXT session toggle — only shown when extended data is available */}
+          {hasExt && (
+            <div className="flex items-center gap-0.5 text-xs">
+              <button
+                className={`px-2 py-0.5 rounded transition-colors ${sessionMode === 'rth' ? 'bg-surface-border text-gray-200' : 'text-gray-600 hover:text-gray-400'}`}
+                onClick={() => { setSessionMode('rth'); setUserOverride(true); }}
+              >
+                RTH
+              </button>
+              <button
+                className={`px-2 py-0.5 rounded transition-colors ${sessionMode === 'ext' ? 'bg-amber-500/20 text-amber-400' : 'text-gray-600 hover:text-gray-400'}`}
+                onClick={() => { setSessionMode('ext'); setUserOverride(true); }}
+              >
+                EXT
+              </button>
+            </div>
+          )}
+
           {/* Sort toggle */}
           <div className="flex items-center gap-0.5 text-xs">
             <button
@@ -338,6 +427,7 @@ export default function Q1Heatmap({ tickers, earnings, moveTags, sparklines, pos
                 moveTag={moveTags.get(t.symbol)}
                 sparkline={sparklines[t.symbol]}
                 position={positions[t.symbol]}
+                sessionMode={sessionMode}
                 onClick={() => onSelectTicker(t.symbol)}
               />
             ))}
