@@ -74,7 +74,9 @@ export default function Dashboard() {
       sentiment: sentimentMap,
       earnings,
       portfolio: positions,
-      moveTags,
+      moveTags: tickers
+        .filter((t) => moveTags.has(t.symbol))
+        .map((t) => ({ symbol: t.symbol, tag: moveTags.get(t.symbol)!, changePercent: t.changePercent })),
       generatedAt: new Date().toISOString(),
     }),
     [tickers, news, sentimentMap, earnings, positions, moveTags],
