@@ -102,7 +102,7 @@ async def _get_alpaca_extended(symbols: list[str]) -> dict[str, tuple[float, flo
     try:
         resp = await _http.get(
             f"{ALPACA_DATA_BASE}/v2/stocks/trades/latest",
-            params={"symbols": ",".join(symbols), "feed": "sip"},
+            params={"symbols": ",".join(symbols), "feed": "iex"},
             headers={
                 "APCA-API-KEY-ID": settings.alpaca_api_key,
                 "APCA-API-SECRET-KEY": settings.alpaca_api_secret,
