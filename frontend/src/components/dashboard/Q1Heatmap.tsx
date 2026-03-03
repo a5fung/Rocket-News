@@ -63,14 +63,13 @@ interface Props {
 type SortMode = 'change' | 'alpha';
 
 /**
- * Dynamic colour scale — intensity is normalised against the biggest mover in
- * the current watchlist, not fixed thresholds.
- *
- * Why: on a +15 % gap-up day a +2 % stock should look nearly flat compared to
- * the runner, giving instant "where is the money flowing today?" context.
+ * Dynamic colour scale — gains normalised against the biggest gain, losses
+ * against the biggest loss. This ensures the top gainer is always deep green
+ * and the top loser is always deep red, regardless of cross-side magnitudes.
  */
-function getTileColor(pct: number, maxAbs: number): { bg: string; text: string } {
-  const norm = maxAbs > 0 ? Math.abs(pct) / maxAbs : 0; // 0 → 1
+function getTileColor(pct: number, maxGain: number, maxLoss: number): { bg: string; text: string } {
+  const baseline = pct >= 0 ? maxGain : maxLoss;
+  const norm = baseline > 0 ? Math.abs(pct) / baseline : 0; // 0 → 1
 
   if (pct >= 0) {
     if (norm > 0.75) return { bg: '#14532d', text: '#4ade80' }; // deep green
@@ -179,7 +178,8 @@ function TickerTile({
 }: {
   ticker: Ticker;
   selected: boolean;
-  maxAbs: number;
+  maxGain: number;
+  maxLoss: number;
   earningsEvent?: EarningsEvent;
   moveTag?: string;
   sparkline?: CandlePoint[];
@@ -192,7 +192,7 @@ function TickerTile({
   const activePct   = showExt ? ticker.extChangePercent! : ticker.changePercent;
   const activePrice = showExt ? (ticker.extPrice ?? ticker.price) : ticker.price;
 
-  const { bg, text } = getTileColor(activePct, maxAbs);
+  const { bg, text } = getTileColor(activePct, maxGain, maxLoss);
   const isUp = activePct >= 0;
 
   let earningsBadge: React.ReactNode = null;
@@ -329,11 +329,17 @@ export default function Q1Heatmap({ tickers, earnings, moveTags, sparklines, pos
     );
   }, [tickers, sortMode, sessionMode]);
 
-  // Normalisation baseline uses whichever session is active
-  const maxAbs = sorted.reduce((m, t) => {
-    const pct = sessionMode === 'ext' && t.extChangePercent != null ? t.extChangePercent : t.changePercent;
-    return Math.max(m, Math.abs(pct));
-  }, 0.01);
+  // Separate baselines for gains and losses — ensures top gainer is always
+  // deep green and top loser is always deep red regardless of cross-side magnitude.
+  const { maxGain, maxLoss } = sorted.reduce(
+    (acc, t) => {
+      const pct = sessionMode === 'ext' && t.extChangePercent != null ? t.extChangePercent : t.changePercent;
+      if (pct >= 0) acc.maxGain = Math.max(acc.maxGain, pct);
+      else acc.maxLoss = Math.max(acc.maxLoss, Math.abs(pct));
+      return acc;
+    },
+    { maxGain: 0.01, maxLoss: 0.01 },
+  );
 
   const count = sorted.length;
   const cols = gridCols(count);
@@ -422,7 +428,8 @@ export default function Q1Heatmap({ tickers, earnings, moveTags, sparklines, pos
                 key={t.symbol}
                 ticker={t}
                 selected={t.symbol === selectedSymbol}
-                maxAbs={maxAbs}
+                maxGain={maxGain}
+                maxLoss={maxLoss}
                 earningsEvent={earningsMap.get(t.symbol)}
                 moveTag={moveTags.get(t.symbol)}
                 sparkline={sparklines[t.symbol]}
