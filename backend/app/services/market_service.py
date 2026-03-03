@@ -37,6 +37,9 @@ _CANDLES_TTL = 300.0
 _alpaca_cache: tuple[float, dict[str, tuple[float, float]]] | None = None  # (ts, {symbol: (ext_price, ext_chg_pct)})
 _ALPACA_TTL = 60.0
 
+# Alpaca OAuth2 Bearer token — valid 15 min, cached until 60s before expiry
+_alpaca_token: tuple[float, str] | None = None  # (expires_at_monotonic, token)
+
 # Daily candles — 1-hour TTL (one data point per market day, rarely changes intraday)
 _daily_candles_cache: dict[str, tuple[float, list[CandlePoint]]] = {}
 _DAILY_CANDLES_TTL = 3600.0
@@ -83,6 +86,38 @@ async def get_quote(symbol: str) -> Ticker | None:
     )
 
 
+async def _get_alpaca_token() -> str | None:
+    """Exchange Alpaca client_id + client_secret for a 15-min Bearer token."""
+    global _alpaca_token
+    now = time.monotonic()
+    if _alpaca_token and now < _alpaca_token[0]:
+        return _alpaca_token[1]
+
+    if not (settings.alpaca_api_key and settings.alpaca_api_secret):
+        return None
+
+    try:
+        resp = await _http.post(
+            "https://authx.alpaca.markets/v1/oauth2/token",
+            data={
+                "grant_type": "client_credentials",
+                "client_id": settings.alpaca_api_key,
+                "client_secret": settings.alpaca_api_secret,
+            },
+            headers={"Content-Type": "application/x-www-form-urlencoded"},
+        )
+        if resp.status_code != 200:
+            return None
+        body = resp.json()
+        token = body.get("access_token")
+        expires_in = body.get("expires_in", 899)
+        # Expire our cache 60s early to avoid using a stale token
+        _alpaca_token = (now + expires_in - 60, token)
+        return token
+    except Exception:
+        return None
+
+
 async def _get_alpaca_extended(symbols: list[str]) -> dict[str, tuple[float, float]]:
     """
     Fetch the latest trade price for each symbol from Alpaca.
@@ -95,17 +130,15 @@ async def _get_alpaca_extended(symbols: list[str]) -> dict[str, tuple[float, flo
     if _alpaca_cache and (now - _alpaca_cache[0]) < _ALPACA_TTL:
         return _alpaca_cache[1]
 
-    if not (settings.alpaca_api_key and settings.alpaca_api_secret):
+    token = await _get_alpaca_token()
+    if not token:
         return {}
 
     try:
         resp = await _http.get(
             f"{ALPACA_DATA_BASE}/v2/stocks/trades/latest",
             params={"symbols": ",".join(symbols), "feed": "sip"},
-            headers={
-                "APCA-API-KEY-ID": settings.alpaca_api_key,
-                "APCA-API-SECRET-KEY": settings.alpaca_api_secret,
-            },
+            headers={"Authorization": f"Bearer {token}"},
         )
         if resp.status_code != 200:
             return {}
