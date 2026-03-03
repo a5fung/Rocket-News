@@ -1,6 +1,6 @@
 'use client';
 
-import { BarChart2, Calendar, Key, Send, Trash2, TrendingUp } from 'lucide-react';
+import { BarChart2, Calendar, Key, Send, Shield, Sunrise, Trash2, TrendingUp } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useChat } from '@/hooks/useChat';
 import { getApiKey, setApiKey } from '@/lib/storage';
@@ -71,6 +71,34 @@ const EXECUTION_PROMPTS: ExecPrompt[] = [
         `What does this signal about retail vs smart money positioning? Be specific with the numbers.`
       );
     },
+  },
+  {
+    id: 'morning-brief',
+    label: 'Morning Brief',
+    icon: <Sunrise size={11} />,
+    buildMessage: (_symbol, tickers) => {
+      const symbols = tickers.map((t) => t.symbol).join(', ') || 'my watchlist';
+      return (
+        `You are a market analyst. Using the live dashboard data, generate a concise pre-market ` +
+        `brief for my watchlist (${symbols}): ` +
+        `(1) biggest movers and what's driving them, ` +
+        `(2) key catalysts or events to watch today, ` +
+        `(3) one macro risk to monitor. ` +
+        `Keep it to 5-6 sentences total. Cite specific tickers and numbers.`
+      );
+    },
+  },
+  {
+    id: 'portfolio-risk',
+    label: 'Portfolio Risk',
+    icon: <Shield size={11} />,
+    buildMessage: () =>
+      `Acting as a risk manager: review my portfolio positions against the current price action, ` +
+      `news, and sentiment data in the dashboard. Identify: ` +
+      `(1) my largest concentration risk by position size or sector, ` +
+      `(2) any holding showing a divergence signal — price moving against sentiment trend, ` +
+      `(3) positions with upcoming earnings or catalysts that change my risk profile. ` +
+      `Be specific with tickers, P&L figures, and percentages.`,
   },
 ];
 
