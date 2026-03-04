@@ -168,7 +168,8 @@ function formatPnl(pnl: number): string {
 function TickerTile({
   ticker,
   selected,
-  maxAbs,
+  maxGain,
+  maxLoss,
   earningsEvent,
   moveTag,
   sparkline,
