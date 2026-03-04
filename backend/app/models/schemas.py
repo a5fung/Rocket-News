@@ -125,6 +125,14 @@ class SentimentBundle(_CamelModel):
     posts: list[SentimentPost]
 
 
+# ─── News brief ───────────────────────────────────────────────────────────────
+
+class NewsBrief(_CamelModel):
+    symbol: str
+    brief: str          # 2-3 sentence AI-generated summary of today's drivers
+    generatedAt: str    # ISO 8601
+
+
 # ─── Chat ─────────────────────────────────────────────────────────────────────
 
 class ChatRole(str, Enum):

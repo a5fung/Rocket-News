@@ -348,6 +348,68 @@ async def get_news_for_ticker(symbol: str, days: int = 3, limit: int = 10) -> li
     return result
 
 
+# ── AI news brief ──────────────────────────────────────────────────────────────
+
+_brief_cache: dict[str, tuple[float, str]] = {}  # symbol → (ts, brief_text)
+_BRIEF_TTL = 1800.0  # 30 minutes
+
+_BRIEF_PROMPT = """\
+You are a concise market analyst. Given the top news headlines and summaries for a stock,
+write a 2-3 sentence brief explaining what is driving the stock today.
+
+Rules:
+- Start with "Here's what's driving ${symbol} today:" (replace {symbol} with the ticker)
+- Be specific — cite the actual catalyst (earnings, analyst upgrade, contract, etc.)
+- If sentiment is mixed, note both the bull and bear angle
+- Never say "based on the provided headlines" or similar meta-language
+- Maximum 3 sentences
+"""
+
+
+async def get_news_brief(symbol: str) -> str:
+    """Generate a 2-3 sentence AI brief for what's driving a stock today."""
+    now = time.monotonic()
+    cached = _brief_cache.get(symbol)
+    if cached and (now - cached[0]) < _BRIEF_TTL:
+        return cached[1]
+
+    # Reuse cached news if available, otherwise fetch
+    news = await get_news_for_ticker(symbol, days=1, limit=10)
+    t1_items = [n for n in news if n.tier == 1][:5] or news[:5]
+
+    if not t1_items:
+        brief = f"No significant news found for ${symbol} in the last 24 hours."
+        _brief_cache[symbol] = (now, brief)
+        return brief
+
+    headlines_text = "\n".join(
+        f"- {item.headline}" + (f": {item.summary[:200]}" if item.summary else "")
+        for item in t1_items
+    )
+
+    from app.core.config import settings
+    if not settings.anthropic_api_key:
+        brief = f"Here's what's driving ${symbol} today: " + t1_items[0].headline + "."
+        _brief_cache[symbol] = (now, brief)
+        return brief
+
+    from app.services.airlock import _get_client
+    client = _get_client()
+    try:
+        response = await client.messages.create(
+            model="claude-haiku-4-5-20251001",
+            max_tokens=200,
+            system=_BRIEF_PROMPT.replace("{symbol}", symbol),
+            messages=[{"role": "user", "content": f"Ticker: ${symbol}\n\nTop headlines:\n{headlines_text}"}],
+        )
+        brief = response.content[0].text.strip()
+    except Exception:
+        brief = f"Here's what's driving ${symbol} today: " + t1_items[0].headline + "."
+
+    _brief_cache[symbol] = (now, brief)
+    return brief
+
+
 async def get_news_for_watchlist(symbols: list[str], limit: int = 20) -> list[NewsItem]:
     """Fetch news for multiple tickers, merge and deduplicate."""
     results = await asyncio.gather(

@@ -1,8 +1,9 @@
 'use client';
 
 import { ExternalLink } from 'lucide-react';
-import { useMemo, useState } from 'react';
-import type { CatalystTag, NewsItem } from '@/types';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { fetchNewsBrief } from '@/lib/api';
+import type { CatalystTag, NewsBrief, NewsItem } from '@/types';
 
 interface Props {
   news: NewsItem[];
@@ -116,8 +117,32 @@ function NewsCard({ item }: { item: NewsItem }) {
 
 export default function Q2NewsFeed({ news, symbols, selectedSymbol, loading }: Props) {
   const [filterTicker, setFilterTicker] = useState<string | null>(null);
+  const [brief, setBrief] = useState<NewsBrief | null>(null);
+  const [briefLoading, setBriefLoading] = useState(false);
+  const briefAbort = useRef<AbortController | null>(null);
 
   const activeTicker = filterTicker ?? selectedSymbol;
+
+  // Fetch AI brief whenever the active ticker changes
+  useEffect(() => {
+    if (!activeTicker) { setBrief(null); return; }
+    // Don't re-fetch if we already have a fresh brief for this symbol
+    if (brief?.symbol === activeTicker) return;
+
+    briefAbort.current?.abort();
+    briefAbort.current = new AbortController();
+    setBriefLoading(true);
+    setBrief(null);
+
+    fetchNewsBrief(activeTicker).then((res) => {
+      if (!briefAbort.current?.signal.aborted && !res.error) {
+        setBrief(res.data);
+      }
+      setBriefLoading(false);
+    });
+
+    return () => briefAbort.current?.abort();
+  }, [activeTicker]); // eslint-disable-line react-hooks/exhaustive-deps
   const filtered = activeTicker
     ? news.filter((n) => n.tickers.includes(activeTicker))
     : news;
@@ -167,6 +192,20 @@ export default function Q2NewsFeed({ news, symbols, selectedSymbol, loading }: P
           ))}
         </div>
       </div>
+      {/* AI brief — shown when a ticker is selected */}
+      {activeTicker && (briefLoading || brief) && (
+        <div className="shrink-0 mx-2 mt-2 px-3 py-2.5 rounded-md border border-accent/25 bg-accent/8">
+          {briefLoading ? (
+            <div className="flex items-center gap-2 animate-pulse">
+              <div className="h-3 w-3 rounded-full bg-accent/40 shrink-0" />
+              <div className="h-3 w-48 rounded bg-accent/20" />
+            </div>
+          ) : brief ? (
+            <p className="text-xs text-gray-300 leading-relaxed">{brief.brief}</p>
+          ) : null}
+        </div>
+      )}
+
       <div className="flex-1 overflow-y-auto p-2 flex flex-col gap-2">
         {loading && news.length === 0 ? (
           // Prominent skeleton while first fetch is in flight

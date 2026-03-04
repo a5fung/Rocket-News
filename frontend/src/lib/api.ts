@@ -5,6 +5,7 @@ import type {
   DashboardContext,
   EarningsEvent,
   MoveTag,
+  NewsBrief,
   NewsItem,
   SentimentBundle,
   SentimentDataPoint,
@@ -75,6 +76,10 @@ export async function fetchNews(symbols: string[], limit = 20): Promise<ApiResul
 
 export async function fetchTickerNews(symbol: string, limit = 10): Promise<ApiResult<NewsItem[]>> {
   return request<NewsItem[]>(`/news/${symbol}?limit=${limit}`);
+}
+
+export async function fetchNewsBrief(symbol: string): Promise<ApiResult<NewsBrief>> {
+  return request<NewsBrief>(`/news/${symbol}/brief`);
 }
 
 // ─── Sentiment ────────────────────────────────────────────────────────────────

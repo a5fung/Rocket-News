@@ -104,6 +104,14 @@ export interface SentimentBundle {
   posts: SentimentPost[];
 }
 
+// ─── News brief ───────────────────────────────────────────────────────────────
+
+export interface NewsBrief {
+  symbol: string;
+  brief: string;
+  generatedAt: string;
+}
+
 // ─── AI Chat ──────────────────────────────────────────────────────────────────
 
 export interface ChatMessage {
