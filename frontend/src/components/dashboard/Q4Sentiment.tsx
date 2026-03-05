@@ -1,5 +1,6 @@
 'use client';
 
+import { ChevronDown } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 import {
   Area,
@@ -343,6 +344,7 @@ export default function Q4Sentiment({ selectedSymbol, symbols, onSelectTicker, o
   const { score, history, posts, priceHistory, loading } = useSentiment(symbol);
   const symbolSet = useMemo(() => new Set(symbols), [symbols]);
   const [shortData, setShortData] = useState<ShortInterest | null>(null);
+  const [showChart, setShowChart] = useState(true);
 
   useEffect(() => {
     if (!symbol) return;
@@ -397,7 +399,17 @@ export default function Q4Sentiment({ selectedSymbol, symbols, onSelectTicker, o
             </div>
           )}
         </div>
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-2">
+          {history.length > 0 && (
+            <button
+              onClick={() => setShowChart((c) => !c)}
+              className="flex items-center gap-0.5 text-[10px] text-gray-500 hover:text-gray-300 transition-colors"
+              title={showChart ? 'Hide chart' : 'Show chart'}
+            >
+              Chart
+              <ChevronDown size={10} className={`transition-transform ${showChart ? 'rotate-180' : ''}`} />
+            </button>
+          )}
           {score && (
             <span className={`text-xs font-medium capitalize ${trendColor}`}>
               {score.trend}
@@ -463,7 +475,7 @@ export default function Q4Sentiment({ selectedSymbol, symbols, onSelectTicker, o
         {score && <TrendingThemes themes={score.themes ?? []} />}
 
         {/* ── 7-day chart (sentiment + price overlay) ── */}
-        {history.length > 0 && (
+        {history.length > 0 && showChart && (
           <SentimentChart
             history={history}
             priceHistory={priceHistory}

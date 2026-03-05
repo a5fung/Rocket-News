@@ -1,6 +1,6 @@
 'use client';
 
-import { ExternalLink } from 'lucide-react';
+import { ChevronDown, ExternalLink } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { fetchInsiderTrades, fetchNewsBrief } from '@/lib/api';
 import type { CatalystTag, InsiderTrade, NewsBrief, NewsItem } from '@/types';
@@ -121,6 +121,7 @@ export default function Q2NewsFeed({ news, symbols, selectedSymbol, loading }: P
   const [briefLoading, setBriefLoading] = useState(false);
   const briefAbort = useRef<AbortController | null>(null);
   const [insiderTrades, setInsiderTrades] = useState<InsiderTrade[]>([]);
+  const [insiderExpanded, setInsiderExpanded] = useState(false);
 
   const activeTicker = filterTicker ?? selectedSymbol;
 
@@ -148,6 +149,7 @@ export default function Q2NewsFeed({ news, symbols, selectedSymbol, loading }: P
   // Fetch insider trades when active ticker changes
   useEffect(() => {
     if (!activeTicker) { setInsiderTrades([]); return; }
+    setInsiderExpanded(false);
     fetchInsiderTrades(activeTicker).then((res) => {
       if (!res.error) setInsiderTrades(res.data);
     });
@@ -181,10 +183,10 @@ export default function Q2NewsFeed({ news, symbols, selectedSymbol, loading }: P
             </div>
           )}
         </div>
-        <div className="flex gap-1 flex-wrap">
+        <div className="flex gap-1 overflow-x-auto scrollbar-none flex-nowrap">
           <button
             onClick={() => setFilterTicker(null)}
-            className={`text-xs px-2 py-0.5 rounded-full transition-colors
+            className={`shrink-0 text-xs px-2 py-0.5 rounded-full transition-colors
               ${activeTicker === null ? 'bg-accent text-white' : 'text-gray-400 hover:text-gray-200'}`}
           >
             All
@@ -193,7 +195,7 @@ export default function Q2NewsFeed({ news, symbols, selectedSymbol, loading }: P
             <button
               key={s}
               onClick={() => setFilterTicker(s === filterTicker ? null : s)}
-              className={`text-xs px-2 py-0.5 rounded-full transition-colors font-mono
+              className={`shrink-0 text-xs px-2 py-0.5 rounded-full transition-colors font-mono
                 ${activeTicker === s ? 'bg-accent text-white' : 'text-gray-400 hover:text-gray-200'}`}
             >
               {s}
@@ -215,41 +217,53 @@ export default function Q2NewsFeed({ news, symbols, selectedSymbol, loading }: P
         </div>
       )}
 
-      {/* Insider trades — shown when a ticker is selected and trades exist */}
+      {/* Insider trades — collapsible panel */}
       {activeTicker && insiderTrades.length > 0 && (
-        <div className="shrink-0 mx-2 mt-1 px-3 py-2 rounded-md border border-yellow-500/20 bg-yellow-500/5">
-          <p className="text-[10px] font-semibold text-yellow-500/70 uppercase tracking-wider mb-1.5">
-            Insider Activity · last 30 days
-          </p>
-          <div className="flex flex-col gap-1">
-            {insiderTrades.slice(0, 4).map((trade, i) => {
-              const buys  = trade.transactions.filter((t) => t.type === 'buy');
-              const sells = trade.transactions.filter((t) => t.type === 'sell');
-              const totalBuy  = buys.reduce((s, t) => s + t.shares, 0);
-              const totalSell = sells.reduce((s, t) => s + t.shares, 0);
-              const isBuy = totalBuy > 0 && totalSell === 0;
-              const isSell = totalSell > 0 && totalBuy === 0;
-              const shares = isBuy ? totalBuy : totalSell;
-              const price = (isBuy ? buys : sells)[0]?.price;
-              return (
-                <div key={i} className="flex items-start gap-1.5 text-xs">
-                  <span className={`shrink-0 font-bold ${isBuy ? 'text-green-400' : isSell ? 'text-red-400' : 'text-gray-400'}`}>
-                    {isBuy ? '▲' : isSell ? '▼' : '●'}
-                  </span>
-                  <span className="text-gray-300 leading-snug">
-                    <span className="font-medium">{trade.name}</span>
-                    <span className="text-gray-500"> ({trade.role})</span>
-                    {' — '}
-                    <span className={isBuy ? 'text-green-400' : isSell ? 'text-red-400' : 'text-gray-400'}>
-                      {isBuy ? 'Bought' : isSell ? 'Sold' : 'Mixed'} {shares.toLocaleString()} shares
+        <div className="shrink-0 mx-2 mt-1 rounded-md border border-yellow-500/20 bg-yellow-500/5">
+          <button
+            onClick={() => setInsiderExpanded((e) => !e)}
+            className="w-full flex items-center justify-between px-3 py-2"
+          >
+            <span className="text-[10px] font-semibold text-yellow-500/70 uppercase tracking-wider">
+              Insider Activity · last 30 days
+              <span className="ml-1.5 font-normal text-yellow-500/50 normal-case">({insiderTrades.length})</span>
+            </span>
+            <ChevronDown
+              size={11}
+              className={`text-yellow-500/50 shrink-0 transition-transform ${insiderExpanded ? 'rotate-180' : ''}`}
+            />
+          </button>
+          {insiderExpanded && (
+            <div className="px-3 pb-2 flex flex-col gap-1">
+              {insiderTrades.slice(0, 4).map((trade, i) => {
+                const buys  = trade.transactions.filter((t) => t.type === 'buy');
+                const sells = trade.transactions.filter((t) => t.type === 'sell');
+                const totalBuy  = buys.reduce((s, t) => s + t.shares, 0);
+                const totalSell = sells.reduce((s, t) => s + t.shares, 0);
+                const isBuy = totalBuy > 0 && totalSell === 0;
+                const isSell = totalSell > 0 && totalBuy === 0;
+                const shares = isBuy ? totalBuy : totalSell;
+                const price = (isBuy ? buys : sells)[0]?.price;
+                return (
+                  <div key={i} className="flex items-start gap-1.5 text-xs">
+                    <span className={`shrink-0 font-bold ${isBuy ? 'text-green-400' : isSell ? 'text-red-400' : 'text-gray-400'}`}>
+                      {isBuy ? '▲' : isSell ? '▼' : '●'}
                     </span>
-                    {price ? <span className="text-gray-500"> @ ${price.toFixed(2)}</span> : null}
-                    <span className="text-gray-600"> · {trade.filingDate}</span>
-                  </span>
-                </div>
-              );
-            })}
-          </div>
+                    <span className="text-gray-300 leading-snug">
+                      <span className="font-medium">{trade.name}</span>
+                      <span className="text-gray-500"> ({trade.role})</span>
+                      {' — '}
+                      <span className={isBuy ? 'text-green-400' : isSell ? 'text-red-400' : 'text-gray-400'}>
+                        {isBuy ? 'Bought' : isSell ? 'Sold' : 'Mixed'} {shares.toLocaleString()} shares
+                      </span>
+                      {price ? <span className="text-gray-500"> @ ${price.toFixed(2)}</span> : null}
+                      <span className="text-gray-600"> · {trade.filingDate}</span>
+                    </span>
+                  </div>
+                );
+              })}
+            </div>
+          )}
         </div>
       )}
 
