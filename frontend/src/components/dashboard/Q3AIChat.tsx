@@ -2,9 +2,116 @@
 
 import { BarChart2, Calendar, Key, Send, Shield, Sunrise, Trash2, TrendingUp } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import ReactMarkdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
 import { useChat } from '@/hooks/useChat';
 import { getApiKey, setApiKey } from '@/lib/storage';
 import type { DashboardContext, Ticker } from '@/types';
+
+// ─── Trade Thesis card ────────────────────────────────────────────────────────
+
+interface TradeThesis {
+  verdict: string;
+  bullCase: string;
+  bearCase: string;
+  biggestRisk: string;
+}
+
+function parseTradeThesis(content: string): TradeThesis | null {
+  const v = content.match(/VERDICT:\s*([^\n·•]+)/i);
+  const b = content.match(/BULL CASE:\s*([\s\S]+?)(?=\s*(?:·|•|\n+BEAR CASE:|\n+BIGGEST RISK:|$))/i);
+  const r = content.match(/BEAR CASE:\s*([\s\S]+?)(?=\s*(?:·|•|\n+BIGGEST RISK:|$))/i);
+  const k = content.match(/BIGGEST RISK:\s*([\s\S]+?)(?=\s*$)/i);
+  if (!v || !b || !r) return null;
+  return {
+    verdict:     v[1].trim(),
+    bullCase:    b[1].trim(),
+    bearCase:    r[1].trim(),
+    biggestRisk: k?.[1].trim() ?? '',
+  };
+}
+
+function TradeThesisCard({ thesis }: { thesis: TradeThesis }) {
+  const verdict = thesis.verdict.toLowerCase();
+  const isBuy  = verdict.includes('buy');
+  const isSell = verdict.includes('sell');
+  const verdictColor = isBuy  ? 'bg-green-900/60 text-green-300 border-green-700/50'
+                     : isSell ? 'bg-red-900/60 text-red-300 border-red-700/50'
+                     :          'bg-amber-900/60 text-amber-300 border-amber-700/50';
+  return (
+    <div className="flex flex-col gap-2 text-sm w-full">
+      {/* Verdict badge */}
+      <div className="flex items-center gap-2">
+        <span className={`px-2.5 py-1 rounded-md border font-bold text-xs tracking-wide ${verdictColor}`}>
+          {thesis.verdict.toUpperCase()}
+        </span>
+      </div>
+
+      {/* Bull case */}
+      <div className="rounded-md bg-green-950/40 border border-green-900/40 px-3 py-2">
+        <p className="text-[10px] font-semibold text-green-500/70 uppercase tracking-wider mb-1">Bull Case</p>
+        <p className="text-xs text-gray-200 leading-relaxed">{thesis.bullCase}</p>
+      </div>
+
+      {/* Bear case */}
+      <div className="rounded-md bg-red-950/40 border border-red-900/40 px-3 py-2">
+        <p className="text-[10px] font-semibold text-red-500/70 uppercase tracking-wider mb-1">Bear Case</p>
+        <p className="text-xs text-gray-200 leading-relaxed">{thesis.bearCase}</p>
+      </div>
+
+      {/* Biggest risk */}
+      {thesis.biggestRisk && (
+        <div className="rounded-md bg-amber-950/30 border border-amber-900/40 px-3 py-2">
+          <p className="text-[10px] font-semibold text-amber-500/70 uppercase tracking-wider mb-1">Biggest Risk</p>
+          <p className="text-xs text-gray-200 leading-relaxed">{thesis.biggestRisk}</p>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ─── Markdown renderer ────────────────────────────────────────────────────────
+
+function MarkdownContent({ content }: { content: string }) {
+  return (
+    <ReactMarkdown
+      remarkPlugins={[remarkGfm]}
+      components={{
+        p:      ({ children }) => <p className="mb-2 last:mb-0 leading-relaxed">{children}</p>,
+        strong: ({ children }) => <strong className="font-semibold text-white">{children}</strong>,
+        em:     ({ children }) => <em className="italic text-gray-300">{children}</em>,
+        ul:     ({ children }) => <ul className="mb-2 ml-3 flex flex-col gap-0.5 list-none">{children}</ul>,
+        ol:     ({ children }) => <ol className="mb-2 ml-3 flex flex-col gap-0.5 list-decimal">{children}</ol>,
+        li:     ({ children }) => (
+          <li className="flex gap-1.5 text-gray-200">
+            <span className="mt-1.5 w-1 h-1 rounded-full bg-gray-500 shrink-0" />
+            <span>{children}</span>
+          </li>
+        ),
+        h1: ({ children }) => <h1 className="font-bold text-white text-base mb-1 mt-2">{children}</h1>,
+        h2: ({ children }) => <h2 className="font-bold text-white text-sm mb-1 mt-2">{children}</h2>,
+        h3: ({ children }) => <h3 className="font-semibold text-gray-200 text-sm mb-1 mt-1.5">{children}</h3>,
+        code: ({ children }) => (
+          <code className="px-1 py-0.5 rounded bg-surface-border text-accent text-xs font-mono">{children}</code>
+        ),
+        blockquote: ({ children }) => (
+          <blockquote className="border-l-2 border-accent/40 pl-3 italic text-gray-400 my-1">{children}</blockquote>
+        ),
+        hr: () => <hr className="border-surface-border my-2" />,
+      }}
+    >
+      {content}
+    </ReactMarkdown>
+  );
+}
+
+// ─── Message content dispatcher ───────────────────────────────────────────────
+
+function AssistantMessage({ content }: { content: string }) {
+  const thesis = parseTradeThesis(content);
+  if (thesis) return <TradeThesisCard thesis={thesis} />;
+  return <MarkdownContent content={content} />;
+}
 
 interface Props {
   getContext: () => DashboardContext;
@@ -292,18 +399,18 @@ export default function Q3AIChat({ getContext, selectedSymbol, tickers }: Props)
         {messages.map((msg) => (
           <div
             key={msg.id}
-            className={`flex flex-col gap-1 max-w-[85%] ${
-              msg.role === 'user' ? 'self-end items-end' : 'self-start items-start'
+            className={`flex flex-col gap-1 ${
+              msg.role === 'user' ? 'self-end items-end max-w-[85%]' : 'self-start items-start w-full'
             }`}
           >
             <div
-              className={`rounded-lg px-3 py-2 text-sm leading-relaxed ${
+              className={`rounded-lg px-3 py-2 text-sm ${
                 msg.role === 'user'
-                  ? 'bg-accent text-white'
-                  : 'bg-surface border border-surface-border text-gray-200'
+                  ? 'bg-accent text-white leading-relaxed'
+                  : 'bg-surface border border-surface-border text-gray-200 w-full'
               }`}
             >
-              {msg.content}
+              {msg.role === 'user' ? msg.content : <AssistantMessage content={msg.content} />}
             </div>
             {msg.citedHeadlines && msg.citedHeadlines.length > 0 && (
               <div className="text-xs text-gray-600 px-1">
