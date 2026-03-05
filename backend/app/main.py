@@ -6,7 +6,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.routing import APIRoute
 
 from app.core.config import settings
-from app.routers import alerts, chat, market, news, sentiment
+from app.routers import alerts, chat, insider, market, news, sentiment
 from app.services import alert_service
 
 
@@ -49,6 +49,7 @@ app.include_router(news.router)
 app.include_router(sentiment.router)
 app.include_router(chat.router)
 app.include_router(alerts.router)
+app.include_router(insider.router)
 
 
 @app.get("/health")

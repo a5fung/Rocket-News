@@ -125,6 +125,31 @@ class SentimentBundle(_CamelModel):
     posts: list[SentimentPost]
 
 
+# ─── Short interest ───────────────────────────────────────────────────────────
+
+class ShortInterest(_CamelModel):
+    symbol: str
+    short_percent_of_float: float | None = None  # 0.045 = 4.5% of float sold short
+    short_ratio: float | None = None             # days to cover at avg daily volume
+    shares_short: int | None = None
+
+
+# ─── Insider trading ──────────────────────────────────────────────────────────
+
+class InsiderTransaction(_CamelModel):
+    type: Literal["buy", "sell"]
+    shares: int
+    price: float | None = None
+    date: str  # YYYY-MM-DD
+
+
+class InsiderTrade(_CamelModel):
+    name: str
+    role: str
+    transactions: list[InsiderTransaction]
+    filing_date: str
+
+
 # ─── News brief ───────────────────────────────────────────────────────────────
 
 class NewsBrief(_CamelModel):

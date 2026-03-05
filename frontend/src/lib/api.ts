@@ -4,6 +4,7 @@ import type {
   ChatMessage,
   DashboardContext,
   EarningsEvent,
+  InsiderTrade,
   MoveTag,
   NewsBrief,
   NewsItem,
@@ -11,6 +12,7 @@ import type {
   SentimentDataPoint,
   SentimentPost,
   SentimentScore,
+  ShortInterest,
   Ticker,
 } from '@/types';
 import { geminiChat } from './gemini';
@@ -80,6 +82,14 @@ export async function fetchTickerNews(symbol: string, limit = 10): Promise<ApiRe
 
 export async function fetchNewsBrief(symbol: string): Promise<ApiResult<NewsBrief>> {
   return request<NewsBrief>(`/news/${symbol}/brief`);
+}
+
+export async function fetchShortInterest(symbols: string[]): Promise<ApiResult<ShortInterest[]>> {
+  return request<ShortInterest[]>(`/market/short-interest?symbols=${symbols.join(',')}`);
+}
+
+export async function fetchInsiderTrades(symbol: string): Promise<ApiResult<InsiderTrade[]>> {
+  return request<InsiderTrade[]>(`/insider/${symbol}`);
 }
 
 // ─── Sentiment ────────────────────────────────────────────────────────────────

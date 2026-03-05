@@ -104,6 +104,31 @@ export interface SentimentBundle {
   posts: SentimentPost[];
 }
 
+// ─── Short interest ───────────────────────────────────────────────────────────
+
+export interface ShortInterest {
+  symbol: string;
+  shortPercentOfFloat?: number;  // 0.045 = 4.5%
+  shortRatio?: number;           // days to cover
+  sharesShort?: number;
+}
+
+// ─── Insider trading ──────────────────────────────────────────────────────────
+
+export interface InsiderTransaction {
+  type: 'buy' | 'sell';
+  shares: number;
+  price?: number;
+  date: string;
+}
+
+export interface InsiderTrade {
+  name: string;
+  role: string;
+  transactions: InsiderTransaction[];
+  filingDate: string;
+}
+
 // ─── News brief ───────────────────────────────────────────────────────────────
 
 export interface NewsBrief {

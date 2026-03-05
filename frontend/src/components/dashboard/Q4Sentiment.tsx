@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import {
   Area,
   Bar,
@@ -13,7 +13,8 @@ import {
   YAxis,
 } from 'recharts';
 import { useSentiment } from '@/hooks/useSentiment';
-import type { CandlePoint, SentimentDataPoint, SentimentScore, SentimentSource } from '@/types';
+import { fetchShortInterest } from '@/lib/api';
+import type { CandlePoint, SentimentDataPoint, SentimentScore, SentimentSource, ShortInterest } from '@/types';
 
 interface Props {
   selectedSymbol: string | null;
@@ -341,6 +342,14 @@ export default function Q4Sentiment({ selectedSymbol, symbols, onSelectTicker, o
   const symbol = selectedSymbol ?? symbols[0] ?? null;
   const { score, history, posts, priceHistory, loading } = useSentiment(symbol);
   const symbolSet = useMemo(() => new Set(symbols), [symbols]);
+  const [shortData, setShortData] = useState<ShortInterest | null>(null);
+
+  useEffect(() => {
+    if (!symbol) return;
+    fetchShortInterest([symbol]).then((res) => {
+      if (!res.error && res.data.length) setShortData(res.data[0]);
+    });
+  }, [symbol]);
 
   useEffect(() => {
     if (score && symbol) onSentimentLoad?.(symbol, score);
@@ -415,6 +424,29 @@ export default function Q4Sentiment({ selectedSymbol, symbols, onSelectTicker, o
         {/* ── Score bar (includes News vs Social mini-bars) ── */}
         {score && (
           <ScoreBar score={score.score} bullish={score.bullishPct} bearish={score.bearishPct} newsSentiment={score.newsSentiment} />
+        )}
+
+        {/* ── Short interest row ── */}
+        {shortData && (shortData.shortPercentOfFloat != null || shortData.shortRatio != null) && (
+          <div className="px-3 pb-1 shrink-0 flex items-center gap-3 text-[10px] text-gray-500">
+            <span className="text-gray-600 font-medium uppercase tracking-wider">Short</span>
+            {shortData.shortPercentOfFloat != null && (
+              <span>
+                Float{' '}
+                <span className={`font-mono font-semibold ${shortData.shortPercentOfFloat > 0.15 ? 'text-red-400' : shortData.shortPercentOfFloat > 0.05 ? 'text-amber-400' : 'text-gray-400'}`}>
+                  {(shortData.shortPercentOfFloat * 100).toFixed(1)}%
+                </span>
+              </span>
+            )}
+            {shortData.shortRatio != null && (
+              <span>
+                Days to Cover{' '}
+                <span className="font-mono font-semibold text-gray-400">
+                  {shortData.shortRatio.toFixed(1)}
+                </span>
+              </span>
+            )}
+          </div>
         )}
 
         {/* ── Whisper number (earnings catalyst only) ── */}
