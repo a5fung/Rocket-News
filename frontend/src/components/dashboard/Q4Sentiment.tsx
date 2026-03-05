@@ -357,9 +357,20 @@ export default function Q4Sentiment({ selectedSymbol, symbols, onSelectTicker, o
     if (score && symbol) onSentimentLoad?.(symbol, score);
   }, [score, symbol, onSentimentLoad]);
 
+  // Contextual trend label: avoid "falling" when score is already bullish,
+  // or "rising" when score is bearish — use softer directional words instead.
+  const composite = score ? Math.round((score.score + 1) * 50) : 50;
+  const trendLabel =
+    !score ? '' :
+    score.trend === 'rising'  && composite <= 45 ? 'recovering' :
+    score.trend === 'rising'                     ? 'rising' :
+    score.trend === 'falling' && composite >= 55 ? 'easing' :
+    score.trend === 'falling'                    ? 'falling' :
+    'neutral';
   const trendColor =
-    score?.trend === 'rising'  ? 'text-bull' :
-    score?.trend === 'falling' ? 'text-bear' : 'text-gray-400';
+    trendLabel === 'rising' || trendLabel === 'recovering' ? 'text-bull' :
+    trendLabel === 'falling'                               ? 'text-bear' :
+    'text-gray-400';
 
   const stCount = posts.filter(p => p.source === 'stocktwits').length;
   const rdCount = posts.filter(p => p.source === 'reddit').length;
@@ -410,9 +421,9 @@ export default function Q4Sentiment({ selectedSymbol, symbols, onSelectTicker, o
               <ChevronDown size={10} className={`transition-transform ${showChart ? 'rotate-180' : ''}`} />
             </button>
           )}
-          {score && (
-            <span className={`text-xs font-medium capitalize ${trendColor}`}>
-              {score.trend}
+          {trendLabel && (
+            <span className={`text-xs font-medium ${trendColor}`}>
+              {trendLabel}
             </span>
           )}
         </div>
