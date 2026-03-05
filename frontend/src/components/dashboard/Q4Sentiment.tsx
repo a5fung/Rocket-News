@@ -139,10 +139,10 @@ function ScoreBar({ score, bullish, bearish, newsSentiment }: {
       {/* Score + label row */}
       <div className="flex items-end justify-between mb-1.5">
         <div className="flex items-baseline gap-1.5">
-          <span className="text-3xl font-bold font-mono leading-none" style={{ color: text }}>
+          <span className="text-xl font-bold font-mono leading-none" style={{ color: text }}>
             {composite}
           </span>
-          <span className="text-sm font-semibold" style={{ color: text }}>{label}</span>
+          <span className="text-xs font-semibold" style={{ color: text }}>{label}</span>
         </div>
         {/* bull / bear / neutral chips — one line */}
         <div className="flex items-center gap-1 text-[10px]">
@@ -344,7 +344,7 @@ export default function Q4Sentiment({ selectedSymbol, symbols, onSelectTicker, o
   const { score, history, posts, priceHistory, loading } = useSentiment(symbol);
   const symbolSet = useMemo(() => new Set(symbols), [symbols]);
   const [shortData, setShortData] = useState<ShortInterest | null>(null);
-  const [showChart, setShowChart] = useState(true);
+  const [showChart, setShowChart] = useState(false);
 
   useEffect(() => {
     if (!symbol) return;
