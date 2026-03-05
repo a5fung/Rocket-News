@@ -308,9 +308,12 @@ async def get_sentiment(symbol: str) -> SentimentScore:
     bullish = sum(1 for s in scores if s > 0.2) / len(scores) * 100
     bearish = sum(1 for s in scores if s < -0.2) / len(scores) * 100
 
-    mid = len(scores) // 2
-    early = sum(scores[:mid]) / max(mid, 1)
-    late = sum(scores[mid:]) / max(len(scores) - mid, 1)
+    # Sort chronologically so early/late split reflects time, not fetch order
+    sorted_posts = sorted(posts, key=lambda p: p.published_at)
+    sorted_scores = [p.sentiment_score for p in sorted_posts]
+    mid = len(sorted_scores) // 2
+    early = sum(sorted_scores[:mid]) / max(mid, 1)
+    late  = sum(sorted_scores[mid:]) / max(len(sorted_scores) - mid, 1)
     trend = (
         "rising" if (late - early) > 0.1
         else "falling" if (early - late) > 0.1
