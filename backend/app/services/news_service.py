@@ -298,9 +298,15 @@ async def get_news_for_ticker(symbol: str, days: int = 3, limit: int = 10) -> li
         _fetch_sec_edgar(symbol, from_date),
     )
 
-    # Merge text sources; deduplicate by headline prefix before airlock
-    # Alpaca (Benzinga) first — highest catalyst signal for small caps
-    combined = alpaca_raw + finnhub_raw + fmp_raw + yahoo_raw
+    # Merge text sources; cap each source first so no single feed monopolizes slots.
+    # Alpaca (Benzinga) first — highest catalyst signal for small caps.
+    PER_SOURCE = 6
+    combined = (
+        alpaca_raw[:PER_SOURCE]
+        + finnhub_raw[:PER_SOURCE]
+        + fmp_raw[:PER_SOURCE]
+        + yahoo_raw[:PER_SOURCE]
+    )
     seen: set[str] = set()
     deduped: list[dict] = []
     for item in combined:
@@ -341,8 +347,8 @@ async def get_news_for_ticker(symbol: str, days: int = 3, limit: int = 10) -> li
                 relevance_score=score.relevance_score,
             ))
 
-    # Sort: Tier 1 first, then most recent
-    items.sort(key=lambda n: (n.tier, n.published_at), reverse=False)
+    # Sort: Tier 1 first, then most recent within each tier
+    items.sort(key=lambda n: (-n.tier, n.published_at), reverse=True)
     result = items[:limit]
     _news_cache[symbol] = (now, result)
     return result
